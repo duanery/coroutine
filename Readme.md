@@ -25,7 +25,7 @@ typedef void (*co_func)(void *);
 typedef struct co_struct {
 	uint64_t rsp;
 	void *stack;
-    int id;
+	int id;
 	int exit;
 	co_func func;
 	void *data;
@@ -113,14 +113,14 @@ switch_to中先保存rbp到r15寄存器到当前栈上，当前栈也是prev协�
 void __switch_to(co_t *prev, co_t *next)
 {
     //赋值current, 切换当前协程
-	current = next;
+    current = next;
     //如果前一个协程执行完毕，则释放前一个协程的数据
-	if(prev->exit) {
+    if(prev->exit) {
         co_t *c = &init;
         while(c->next != prev) c = c->next;
         c->next = prev->next;
-		free(prev);
-	}
+        free(prev);
+    }
 }
 ```
 
@@ -146,7 +146,7 @@ int schedule()
      * 在选择时，可以选择优先级高的协程先执行。
      * 这里最简处理。
     **/
-	co_t *next = current->next;
+    co_t *next = current->next;
     if(!next)
         next = &init;
     //协程切换
@@ -177,8 +177,8 @@ int cocreate(int stack_size, co_func f, void *d)
     static int co_id = 1;
     frame_t *frame;
     //分配新的协程co_t,并加入init队列中
-	co_t *co = malloc(sizeof(co_t) + stack_size);
-	co->stack = (void *)(co + 1);
+    co_t *co = malloc(sizeof(co_t) + stack_size);
+    co->stack = (void *)(co + 1);
     co->stack += stack_size;
     co->id = co_id++;
     co->exit = 0;
