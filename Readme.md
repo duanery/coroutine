@@ -188,7 +188,7 @@ int cocreate(int stack_size, co_func f, void *d)
     init.next = co;
     
     /*
-     * 这里的整个协程的核心
+     * 这里是整个协程的核心
      * 要初始化新创建的栈，并初始化切换到新协程时要执行的函数
     **/
     frame = (frame_t *)co->stack;
