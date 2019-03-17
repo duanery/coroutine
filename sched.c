@@ -3,6 +3,11 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "compiler.h"
+#include "rbtree.h"
+#include "list.h"
+#include "co.h"
+
 typedef struct stack_frame {
     uint64_t r15;
     uint64_t r14;
@@ -13,22 +18,36 @@ typedef struct stack_frame {
     uint64_t ret;
 }frame_t;
 
-typedef void (*co_func)(void *);
 typedef struct co_struct {
     uint64_t rsp;
     void *stack;
     int id;
     int exit;
-    co_func func;
+    co_routine func;
     void *data;
-    struct co_struct *next;
+    struct list_head rq_node;
+    struct rb_node rb;
 }co_t;
 
+
 // 初始协程, 标识主线程
-static co_t init = {0,0,0,0,0,NULL};
+static co_t init = {0, 0, 0, 0, 0, 0, .rq_node = LIST_HEAD_INIT(init.rq_node)};
 
 //current 标识当前协程co_t
 co_t *current=&init;
+
+// 协程红黑树的根
+static struct rb_root co_root = RB_ROOT;
+
+static inline int co_cmp(co_t *co1, co_t *co2)
+{
+    return intcmp(co1->id, co2->id);
+}
+
+static __init void co_init()
+{
+    rb_insert(&co_root, &init, rb, co_cmp);
+}
 
 void __switch_to(co_t *prev, co_t *next)
 {
@@ -36,14 +55,15 @@ void __switch_to(co_t *prev, co_t *next)
     current = next;
     //如果前一个协程执行完毕，则释放前一个协程的数据
     if(prev->exit) {
-        co_t *c = &init;
-        while(c->next != prev) c = c->next;
-        c->next = prev->next;
+        list_del(&prev->rq_node);
+        rb_erase(&prev->rb, &co_root);
         free(prev);
     }
 }
 
-int schedule()
+extern void switch_to(co_t *, co_t *);
+
+static int __schedule(bool dequeue)
 {
     /*
      * 选择下一个协程
@@ -51,12 +71,19 @@ int schedule()
      * 在选择时，可以选择优先级高的协程先执行。
      * 这里最简处理。
     **/
-    co_t *next = current->next;
-    if(!next)
-        next = &init;
+    co_t *next = list_next_entry(current, rq_node);
+    if(dequeue && current != &init)
+        list_del_init(&current->rq_node);
     //协程切换
-    switch_to(current, next);
-    return (init.next != NULL);
+    if(current != next)
+        switch_to(current, next);
+    
+    return !list_empty(&init.rq_node);
+}
+
+int schedule()
+{
+    return __schedule(false);
 }
 
 static void __new()
@@ -69,7 +96,7 @@ static void __new()
     schedule();
 }
 
-int cocreate(int stack_size, co_func f, void *d)
+int cocreate(int stack_size, co_routine f, void *d)
 {
     static int co_id = 1;
     frame_t *frame;
@@ -81,8 +108,6 @@ int cocreate(int stack_size, co_func f, void *d)
     co->exit = 0;
     co->func = f;
     co->data = d;
-    co->next = init.next;
-    init.next = co;
     
     /*
      * 这里是整个协程的核心
@@ -93,11 +118,40 @@ int cocreate(int stack_size, co_func f, void *d)
     memset(frame, 0, sizeof(frame_t));
     frame->ret = (uint64_t)__new;  /* 核心中的核心 */
     co->rsp = (uint64_t)frame;
-    return 0;
+    
+    //插入运行队列和红黑树
+    list_add_tail(&co->rq_node, &init.rq_node);
+    rb_insert(&co_root, co, rb, co_cmp);
+    
+    return co->id;
 }
 
 //返回当前协程id
 int coid()
 {
     return current->id;
+}
+
+void cokill(int coid)
+{
+    co_t key = { .id = coid };
+    co_t *co = rb_search(&co_root, &key, rb, co_cmp);
+    if(co) {
+        co->exit = 1;
+        schedule();
+    }
+}
+
+int cowait()
+{
+    return __schedule(true);
+}
+
+void cowakeup(int coid)
+{
+    co_t key = { .id = coid };
+    co_t *co = rb_search(&co_root, &key, rb, co_cmp);
+    //插入运行队列
+    if(co && list_empty(&co->rq_node))
+        list_add_tail(&co->rq_node, &init.rq_node);
 }
