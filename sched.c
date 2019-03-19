@@ -46,6 +46,7 @@ static inline int co_cmp(co_t *co1, co_t *co2)
 
 static __init void co_init()
 {
+    rb_init_node(&init.rb);
     rb_insert(&co_root, &init, rb, co_cmp);
 }
 
@@ -121,6 +122,7 @@ int cocreate(int stack_size, co_routine f, void *d)
     
     //插入运行队列和红黑树
     list_add_tail(&co->rq_node, &init.rq_node);
+    rb_init_node(&co->rb);
     rb_insert(&co_root, co, rb, co_cmp);
     
     return co->id;
@@ -137,6 +139,9 @@ void cokill(int coid)
     co_t key = { .id = coid };
     co_t *co = rb_search(&co_root, &key, rb, co_cmp);
     if(co) {
+        //如果co睡眠则唤醒，放在current后面，schedule会尽快调度到。
+        if(list_empty(&co->rq_node))
+            list_add(&co->rq_node, &current->rq_node);
         co->exit = 1;
         schedule();
     }
@@ -151,7 +156,7 @@ void cowakeup(int coid)
 {
     co_t key = { .id = coid };
     co_t *co = rb_search(&co_root, &key, rb, co_cmp);
-    //插入运行队列
+    //插入运行队列，放在队列尾
     if(co && list_empty(&co->rq_node))
         list_add_tail(&co->rq_node, &init.rq_node);
 }

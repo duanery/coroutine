@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <errno.h>
 
 #include "rbtree.h"
 #include "co.h"
@@ -23,14 +24,15 @@ static inline int sleep_info_cmp(struct sleep_info *s1, struct sleep_info *s2)
     return r != 0 ? r : intcmp(s1->t.tv_usec, s2->t.tv_usec);
 }
 
-//对sleep和usleep的封装
-void cosleep(long us)
+//对usleep的封装
+int cousleep(useconds_t us)
 {
     if(unlikely(coid() == 0)) {
-        usleep(us);
-        return;
+        return usleep(us);
     }
+    int ret = 0;
     struct sleep_info si;
+    struct sleep_info cur;
     time_t tv_sec = us / 1000000;
     long   tv_usec = us % 1000000;
     si.coid = coid();
@@ -41,9 +43,82 @@ void cosleep(long us)
         si.t.tv_sec++;
         si.t.tv_usec -= 1000000;
     }
+    rb_init_node(&si.rb);
     rb_insert(&sleep_info_root, &si, rb, sleep_info_cmp);
     cowait();
     rb_erase(&si.rb, &sleep_info_root);
+    gettimeofday(&cur.t, NULL);
+    if(sleep_info_cmp(&si, &cur) > 0) {
+        errno = EINTR;
+        ret = -1;
+    }
+    return ret;
+}
+
+//对sleep的封装
+unsigned int cosleep(unsigned int seconds)
+{
+    if(unlikely(coid() == 0)) {
+        return sleep(seconds);
+    }
+    struct sleep_info si;
+    struct sleep_info cur;
+    si.coid = coid();
+    gettimeofday(&si.t, NULL);
+    si.t.tv_sec += seconds;
+    rb_init_node(&si.rb);
+    rb_insert(&sleep_info_root, &si, rb, sleep_info_cmp);
+    cowait();
+    rb_erase(&si.rb, &sleep_info_root);
+    gettimeofday(&cur.t, NULL);
+    if(sleep_info_cmp(&si, &cur) > 0) {
+        long d = si.t.tv_usec - cur.t.tv_usec;
+        int t = 0;
+        if(d < -500000) t = -1;
+        else if(d > 500000) t = 1;
+        return si.t.tv_sec - cur.t.tv_sec - t;
+    }
+    return 0;
+}
+
+//对nanosleep的封装
+int conanosleep(const struct timespec *req, struct timespec *rem)
+{
+    if(unlikely(coid() == 0)) {
+        return nanosleep(req, rem);
+    }
+    int ret = 0;
+    struct sleep_info si;
+    struct sleep_info cur;
+    time_t tv_sec = req->tv_sec;
+    long   tv_usec = req->tv_nsec / 1000;
+    si.coid = coid();
+    gettimeofday(&si.t, NULL);
+    si.t.tv_sec += tv_sec;
+    si.t.tv_usec += tv_usec;
+    if(si.t.tv_usec > 1000000) {
+        si.t.tv_sec++;
+        si.t.tv_usec -= 1000000;
+    }
+    rb_init_node(&si.rb);
+    rb_insert(&sleep_info_root, &si, rb, sleep_info_cmp);
+    cowait();
+    rb_erase(&si.rb, &sleep_info_root);
+    gettimeofday(&cur.t, NULL);
+    if(sleep_info_cmp(&si, &cur) > 0) {
+        errno = EINTR;
+        ret = -1;
+        if(rem) {
+            long us = si.t.tv_usec - cur.t.tv_usec;
+            rem->tv_sec = si.t.tv_sec - cur.t.tv_sec;
+            if(us < 0) {
+                rem->tv_sec--;
+                us += 1000000;
+            }
+            rem->tv_nsec = us * 1000 + req->tv_nsec % 1000;
+        }
+    }
+    return ret;
 }
 
 //返回值是微妙

@@ -13,7 +13,11 @@ void cowakeup(int coid);
 
 
 //syscall.c
-void cosleep(long us);
+#include <unistd.h>
+int cousleep(useconds_t us);
+unsigned int cosleep(unsigned int seconds);
+#include <time.h>
+int conanosleep(const struct timespec *req, struct timespec *rem);
 int coread(int fd, void *buf, size_t count);
 int coread1(int fd, void *buf, size_t count);
 int cowrite(int fd, const void *buf, size_t count);

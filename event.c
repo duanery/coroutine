@@ -57,6 +57,7 @@ int register_event(int fd, event_handler_t h, void *data)
     ei->handle = h;
     ei->data = data;
     ei->events = EPOLLIN | EPOLLET;
+    rb_init_node(&ei->rb);
     
     memset(&ev, 0, sizeof(ev));
     ev.events = ei->events;
@@ -110,7 +111,7 @@ void event_loop(int timeout)
 {
     int i, nr;
     
-    if(timeout > 0 && timeout < 1000) {
+    if (timeout >= 0 && timeout < 1000) {
         usleep(timeout);
         return;
     }
@@ -150,7 +151,7 @@ static void event_routine(void *data)
     
     register_event(coevent->fd, event_wakeup, coevent);
     
-    coevent->handle(coevent->fd, data);
+    coevent->handle(coevent->fd, coevent->data);
     
     unregister_event(coevent->fd);
     
@@ -164,7 +165,8 @@ int register_coevent(int fd, coevent_handler_t h, void *data)
     struct coevent_info *coevent;
     
     coevent = malloc(sizeof(struct coevent_info));
-    
+    if(unlikely(coevent == NULL))
+        return -1;
     coevent->coid = cocreate(128*1024, event_routine, coevent);
     coevent->fd = fd;
     coevent->handle = h;

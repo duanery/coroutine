@@ -299,5 +299,8 @@ epoll轮询的问题：当epoll返回一个套接字可以读，去读的时候�
 
 ### 2.系统调用
 
-新增`cosleep,coread,coread1,cowrite,coaccept`等在协程内部使用的系统调用。
+新增`cosleep,cousleep,conanosleep,coread,coread1,cowrite,coaccept`等在协程内部使用的系统调用。
 
+### 3.遗留问题
+
+1. cokill杀死协程会导致一些问题。
