@@ -29,6 +29,10 @@ typedef struct co_struct {
     struct rb_node rb;
 }co_t;
 
+struct co_info {
+    uint64_t max_stack_consumption;
+    uint64_t co_num;
+}co_info = {0, 0};
 
 // 初始协程, 标识主线程
 static co_t init = {0, 0, 0, 0, 0, 0, .rq_node = LIST_HEAD_INIT(init.rq_node)};
@@ -54,11 +58,17 @@ void __switch_to(co_t *prev, co_t *next)
 {
     //赋值current, 切换当前协程
     current = next;
+    
+    if(prev != &init &&
+        co_info.max_stack_consumption < ((uint64_t)prev->stack - prev->rsp))
+        co_info.max_stack_consumption = (uint64_t)prev->stack - prev->rsp;
+    
     //如果前一个协程执行完毕，则释放前一个协程的数据
     if(prev->exit) {
         list_del(&prev->rq_node);
         rb_erase(&prev->rb, &co_root);
         free(prev);
+        co_info.co_num--;
     }
 }
 
@@ -124,6 +134,7 @@ int cocreate(int stack_size, co_routine f, void *d)
     list_add_tail(&co->rq_node, &init.rq_node);
     rb_init_node(&co->rb);
     rb_insert(&co_root, co, rb, co_cmp);
+    co_info.co_num++;
     
     return co->id;
 }

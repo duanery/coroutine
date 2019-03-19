@@ -47,7 +47,7 @@ void signal_routine(int sfd, void *d)
     sigemptyset(&mask); 
     sigaddset(&mask, SIGINT); 
     sigaddset(&mask, SIGQUIT); 
-    sigaddset(&mask, SIGUSR1); 
+    sigaddset(&mask, SIGTSTP); 
 
     if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1) 
         handle_error("sigprocmask");
@@ -58,15 +58,20 @@ void signal_routine(int sfd, void *d)
         if (s != sizeof(struct signalfd_siginfo)) 
             handle_error("read"); 
 
+        extern struct co_info {
+            uint64_t max_stack_consumption;
+            uint64_t co_num;
+        } co_info;
+        printf("max_stack_consumption %u co_num %u\n", co_info.max_stack_consumption, co_info.co_num);
+        
         if (fdsi.ssi_signo == SIGINT) { 
             printf("Got SIGINT\n"); 
             exit(1);
         } else if (fdsi.ssi_signo == SIGQUIT) { 
             printf("Got SIGQUIT\n"); 
             exit(0); 
-        } else if (fdsi.ssi_signo == SIGUSR1) { 
-            printf("Got SIGUSR1, break\n");
-            break;
+        } else if (fdsi.ssi_signo == SIGTSTP) { 
+            ;
         } else {
             printf("Read unexpected signal\n"); 
         } 
@@ -88,9 +93,6 @@ void signalfd_init()
 
     register_coevent(sfd, signal_routine, NULL);
 }
-
-
-
 
 
 void set_nonblocking(int fd) {
@@ -184,14 +186,10 @@ void main()
 {
     signalfd_init();
     signal(SIGPIPE, SIG_IGN);
-    //cocreate(16*1024, f, NULL);
     printf("pid:%d\n", getpid());
-    /*    struct timeval tv, tv1;
-        gettimeofday(&tv, NULL);
-        printf("sleep left %d\n", sleep(10));
-        gettimeofday(&tv1, NULL);
-        printf("%d cosleep %d us\n", coid(), (tv1.tv_sec - tv.tv_sec)*1000000+tv1.tv_usec - tv.tv_usec);
-    */printf("coid = %d\n", coid());
+    printf("coid = %d\n", coid());
+    
+    cocreate(16*1024, f, NULL);
     bind_listen(55667, echo_handler);
     bind_listen(55668, response_handle);
     while(1) {
