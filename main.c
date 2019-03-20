@@ -182,8 +182,28 @@ void bind_listen(unsigned short port, void *handle) {
     register_coevent( listen_fd, listenfd_handler, handle );
 }
 
+
+int stack_loop = 0;
+void buf()
+{
+    char buff[512];
+    int i = 0;
+    for(;i<256;i++)
+        buff[i] = (unsigned char)stack_loop;
+    if(++stack_loop >= 60 ) return;
+    buf();
+    printf("coid %d, buff %d\n", coid(), buff[0]);
+}
+void pagefault(void *d)
+{
+    buf();
+}
+
 void main()
 {
+    cocreate(16*1024, pagefault, NULL);
+    while(schedule());
+    
     signalfd_init();
     signal(SIGPIPE, SIG_IGN);
     printf("pid:%d\n", getpid());

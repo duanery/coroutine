@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <malloc.h>
+#include <sys/mman.h>
+#include <signal.h>
+#include <sys/ucontext.h>
 
 #include "compiler.h"
 #include "rbtree.h"
@@ -21,6 +25,7 @@ typedef struct stack_frame {
 typedef struct co_struct {
     uint64_t rsp;
     void *stack;
+    int stack_size;
     int id;
     int exit;
     co_routine func;
@@ -48,12 +53,6 @@ static inline int co_cmp(co_t *co1, co_t *co2)
     return intcmp(co1->id, co2->id);
 }
 
-static __init void co_init()
-{
-    rb_init_node(&init.rb);
-    rb_insert(&co_root, &init, rb, co_cmp);
-}
-
 void __switch_to(co_t *prev, co_t *next)
 {
     //赋值current, 切换当前协程
@@ -67,6 +66,7 @@ void __switch_to(co_t *prev, co_t *next)
     if(prev->exit) {
         list_del(&prev->rq_node);
         rb_erase(&prev->rb, &co_root);
+        free(prev->stack);
         free(prev);
         co_info.co_num--;
     }
@@ -112,19 +112,22 @@ int cocreate(int stack_size, co_routine f, void *d)
     static int co_id = 1;
     frame_t *frame;
     //分配新的协程co_t,并加入init队列中
-    co_t *co = malloc(sizeof(co_t) + stack_size);
-    co->stack = (void *)(co + 1);
-    co->stack += stack_size;
+    co_t *co = malloc(sizeof(co_t));
+    co->stack = memalign(getpagesize(), stack_size);
+    co->stack_size = stack_size;
     co->id = co_id++;
     co->exit = 0;
     co->func = f;
     co->data = d;
     
+    //保护栈
+    mprotect(co->stack, getpagesize(), PROT_READ);
+    
     /*
      * 这里是整个协程的核心
      * 要初始化新创建的栈，并初始化切换到新协程时要执行的函数
     **/
-    frame = (frame_t *)co->stack;
+    frame = (frame_t *)(co->stack + stack_size);
     frame--;
     memset(frame, 0, sizeof(frame_t));
     frame->ret = (uint64_t)__new;  /* 核心中的核心 */
@@ -170,4 +173,61 @@ void cowakeup(int coid)
     //插入运行队列，放在队列尾
     if(co && list_empty(&co->rq_node))
         list_add_tail(&co->rq_node, &init.rq_node);
+}
+
+//#define P(r) printf(#r " %016llx\n", sigctx->r)
+static void do_page_fault(int sig, siginfo_t *siginfo, void *u)
+{
+    ucontext_t *ucontext = u;
+    struct sigcontext *sigctx = (struct sigcontext *)&ucontext->uc_mcontext;
+    void *addr = siginfo->si_addr;
+    void *stack = current->stack;
+    int stack_size = current->stack_size;
+    int pagesize = getpagesize();
+    /*P(r8);P(r9);P(r10);P(r11);P(r12);P(r13);P(r14);P(r15);
+    P(rdi);P(rsi);P(rbp);P(rbx);P(rdx);P(rax);P(rcx);P(rsp);
+    P(rip);
+    printf("stack %016llx - %016llx\n", stack, stack+stack_size);
+    printf("addr %016llx\n", addr);*/
+    if(addr >= stack &&  addr <= stack + pagesize) {
+        //权限修改回来
+        mprotect(stack, pagesize, PROT_READ|PROT_WRITE);
+        //申请新的栈
+        current->stack_size += 2*pagesize;
+        current->stack = memalign(pagesize, current->stack_size);
+        //栈回溯，需要把栈上保存的所有rbp的值全部修改掉
+        unsigned long offset = current->stack+current->stack_size - (stack+stack_size);
+        unsigned long *rbp = (unsigned long *)sigctx->rbp;
+        unsigned long *rsp;
+        while(*rbp != 0) {
+            rsp = rbp;
+            rbp = (unsigned long *)*rbp;
+            *rsp += offset;
+        }
+        //栈拷贝
+        memcpy(current->stack + 3*pagesize, stack + pagesize, stack_size-pagesize);
+        free(stack);
+        sigctx->rsp += offset;
+        sigctx->rbp += offset;
+        mprotect(current->stack, pagesize, PROT_READ);
+    }else
+        exit(128+SIGSEGV);
+}
+
+static __init void co_init()
+{
+    rb_init_node(&init.rb);
+    rb_insert(&co_root, &init, rb, co_cmp);
+    
+    stack_t ss;
+    ss.ss_sp = malloc(SIGSTKSZ);
+    ss.ss_size = SIGSTKSZ;
+    ss.ss_flags = 0;
+    sigaltstack(&ss, NULL);
+    
+    struct sigaction sa;
+    sa.sa_sigaction = do_page_fault;
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, NULL);
 }
