@@ -6,6 +6,8 @@
 #include <sys/mman.h>
 #include <signal.h>
 #include <sys/ucontext.h>
+#include <inttypes.h>
+#include <execinfo.h>
 
 #include "compiler.h"
 #include "rbtree.h"
@@ -27,7 +29,8 @@ typedef struct co_struct {
     void *stack;
     int stack_size;
     int id;
-    int exit;
+    int exit : 1;
+    int autostack : 1;
     co_routine func;
     void *data;
     struct list_head rq_node;
@@ -58,14 +61,17 @@ void __switch_to(co_t *prev, co_t *next)
     //赋值current, 切换当前协程
     current = next;
     
-    if(prev != &init &&
-        co_info.max_stack_consumption < ((uint64_t)prev->stack - prev->rsp))
-        co_info.max_stack_consumption = (uint64_t)prev->stack - prev->rsp;
+    if(prev != &init && !prev->autostack && 
+        co_info.max_stack_consumption < ((uint64_t)prev->stack + prev->stack_size - prev->rsp))
+        co_info.max_stack_consumption = (uint64_t)prev->stack + prev->stack_size - prev->rsp;
     
     //如果前一个协程执行完毕，则释放前一个协程的数据
     if(prev->exit) {
         list_del(&prev->rq_node);
         rb_erase(&prev->rb, &co_root);
+        if(prev->autostack) {
+            mprotect(prev->stack, getpagesize(), PROT_READ|PROT_WRITE);
+        }
         free(prev->stack);
         free(prev);
         co_info.co_num--;
@@ -110,10 +116,18 @@ static void __new()
 int cocreate(int stack_size, co_routine f, void *d)
 {
     static int co_id = 1;
+    int pagesize = getpagesize();
     frame_t *frame;
+    co_t *co;
+    
     //分配新的协程co_t,并加入init队列中
-    co_t *co = malloc(sizeof(co_t));
-    co->stack = memalign(getpagesize(), stack_size);
+    co = malloc(sizeof(co_t));
+    if(stack_size == AUTOSTACK) {
+        co->autostack = 1;
+        stack_size = STACK_GROW * pagesize;
+    } else
+        co->autostack = 0;
+    co->stack = memalign(pagesize, stack_size);
     co->stack_size = stack_size;
     co->id = co_id++;
     co->exit = 0;
@@ -121,7 +135,9 @@ int cocreate(int stack_size, co_routine f, void *d)
     co->data = d;
     
     //保护栈
-    mprotect(co->stack, getpagesize(), PROT_READ);
+    if(co->autostack) {
+        mprotect(co->stack, pagesize, PROT_READ); /* PROT_NONE */
+    }
     
     /*
      * 这里是整个协程的核心
@@ -175,43 +191,58 @@ void cowakeup(int coid)
         list_add_tail(&co->rq_node, &init.rq_node);
 }
 
-//#define P(r) printf(#r " %016llx\n", sigctx->r)
+
 static void do_page_fault(int sig, siginfo_t *siginfo, void *u)
 {
     ucontext_t *ucontext = u;
     struct sigcontext *sigctx = (struct sigcontext *)&ucontext->uc_mcontext;
     void *addr = siginfo->si_addr;
-    void *stack = current->stack;
-    int stack_size = current->stack_size;
+    void *stack = current->stack, *newstack;
+    int stack_size = current->stack_size, new_stack_size;
     int pagesize = getpagesize();
-    /*P(r8);P(r9);P(r10);P(r11);P(r12);P(r13);P(r14);P(r15);
-    P(rdi);P(rsi);P(rbp);P(rbx);P(rdx);P(rax);P(rcx);P(rsp);
-    P(rip);
-    printf("stack %016llx - %016llx\n", stack, stack+stack_size);
-    printf("addr %016llx\n", addr);*/
-    if(addr >= stack &&  addr <= stack + pagesize) {
-        //权限修改回来
-        mprotect(stack, pagesize, PROT_READ|PROT_WRITE);
-        //申请新的栈
-        current->stack_size += 2*pagesize;
-        current->stack = memalign(pagesize, current->stack_size);
-        //栈回溯，需要把栈上保存的所有rbp的值全部修改掉
-        unsigned long offset = current->stack+current->stack_size - (stack+stack_size);
+    
+    if(likely(current != &init) &&
+        current->autostack && 
+        addr >= stack &&  addr <= stack + pagesize) {
+        unsigned long offset;
         unsigned long *rbp = (unsigned long *)sigctx->rbp;
         unsigned long *rsp;
+        
+        //权限修改回来
+        mprotect(stack, pagesize, PROT_READ|PROT_WRITE);
+        
+        //申请新的栈
+        new_stack_size = stack_size + STACK_GROW * pagesize;
+        newstack = memalign(pagesize, new_stack_size);
+        
+        //栈回溯，需要把栈上保存的所有rbp的值全部修改掉
+        offset = newstack + new_stack_size - (stack + stack_size);
         while(*rbp != 0) {
             rsp = rbp;
             rbp = (unsigned long *)*rbp;
             *rsp += offset;
         }
-        //栈拷贝
-        memcpy(current->stack + 3*pagesize, stack + pagesize, stack_size-pagesize);
-        free(stack);
         sigctx->rsp += offset;
         sigctx->rbp += offset;
-        mprotect(current->stack, pagesize, PROT_READ);
-    }else
+        
+        //建立新栈
+        memcpy(newstack + STACK_GROW * pagesize + pagesize, stack + pagesize, stack_size - pagesize);
+        mprotect(newstack, pagesize, PROT_READ);
+        current->stack = newstack;
+        current->stack_size = new_stack_size;
+        free(stack);
+    } else {
+        #define P(r) printf("  %-3s %016" PRIx64 "\n", #r, sigctx->r)
+        printf("Registers:\n");
+        P(r8);  P(r9);  P(r10); P(r11); P(r12); P(r13); P(r14); P(r15);
+        P(rdi); P(rsi); P(rbp); P(rbx); P(rdx); P(rax); P(rcx); P(rsp);
+        P(rip);
+        printf("coid %d stack %016"PRIx64" - %016"PRIx64"\n", coid(), stack, stack+stack_size);
+        printf("addr %016"PRIx64"\n", addr);
+        printf("Call Trace:\n");
+
         exit(128+SIGSEGV);
+    }
 }
 
 static __init void co_init()

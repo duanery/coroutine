@@ -188,7 +188,7 @@ void buf()
 {
     char buff[512];
     int i = 0;
-    for(;i<256;i++)
+    for(;i<128;i++)
         buff[i] = (unsigned char)stack_loop;
     if(++stack_loop >= 60 ) return;
     buf();
@@ -201,7 +201,7 @@ void pagefault(void *d)
 
 void main()
 {
-    cocreate(16*1024, pagefault, NULL);
+    cocreate(AUTOSTACK, pagefault, NULL);
     while(schedule());
     
     signalfd_init();

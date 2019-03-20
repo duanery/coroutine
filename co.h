@@ -9,7 +9,8 @@ int coid();
 void cokill(int coid);
 int cowait();
 void cowakeup(int coid);
-
+#define AUTOSTACK 0
+#define STACK_GROW 2 /* pages */
 
 
 //syscall.c
