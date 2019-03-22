@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
 #include <errno.h>
@@ -31,27 +32,32 @@ int cousleep(useconds_t us)
         return usleep(us);
     }
     int ret = 0;
-    struct sleep_info si;
+    struct sleep_info *si = malloc(sizeof(*si));
     struct sleep_info cur;
     time_t tv_sec = us / 1000000;
     long   tv_usec = us % 1000000;
-    si.coid = coid();
-    gettimeofday(&si.t, NULL);
-    si.t.tv_sec += tv_sec;
-    si.t.tv_usec += tv_usec;
-    if(si.t.tv_usec > 1000000) {
-        si.t.tv_sec++;
-        si.t.tv_usec -= 1000000;
+    if(!si) {
+        errno = ENOMEM;
+        return -1;
     }
-    rb_init_node(&si.rb);
-    rb_insert(&sleep_info_root, &si, rb, sleep_info_cmp);
+    si->coid = coid();
+    gettimeofday(&si->t, NULL);
+    si->t.tv_sec += tv_sec;
+    si->t.tv_usec += tv_usec;
+    if(si->t.tv_usec > 1000000) {
+        si->t.tv_sec++;
+        si->t.tv_usec -= 1000000;
+    }
+    rb_init_node(&si->rb);
+    rb_insert(&sleep_info_root, si, rb, sleep_info_cmp);
     cowait();
-    rb_erase(&si.rb, &sleep_info_root);
+    rb_erase(&si->rb, &sleep_info_root);
     gettimeofday(&cur.t, NULL);
-    if(sleep_info_cmp(&si, &cur) > 0) {
+    if(sleep_info_cmp(si, &cur) > 0) {
         errno = EINTR;
         ret = -1;
     }
+    free(si);
     return ret;
 }
 
@@ -61,23 +67,28 @@ unsigned int cosleep(unsigned int seconds)
     if(unlikely(coid() == 0)) {
         return sleep(seconds);
     }
-    struct sleep_info si;
+    struct sleep_info *si = malloc(sizeof(*si));
     struct sleep_info cur;
-    si.coid = coid();
-    gettimeofday(&si.t, NULL);
-    si.t.tv_sec += seconds;
-    rb_init_node(&si.rb);
-    rb_insert(&sleep_info_root, &si, rb, sleep_info_cmp);
+    if(!si) {
+        errno = ENOMEM;
+        return seconds;
+    }
+    si->coid = coid();
+    gettimeofday(&si->t, NULL);
+    si->t.tv_sec += seconds;
+    rb_init_node(&si->rb);
+    rb_insert(&sleep_info_root, si, rb, sleep_info_cmp);
     cowait();
-    rb_erase(&si.rb, &sleep_info_root);
+    rb_erase(&si->rb, &sleep_info_root);
     gettimeofday(&cur.t, NULL);
-    if(sleep_info_cmp(&si, &cur) > 0) {
-        long d = si.t.tv_usec - cur.t.tv_usec;
+    if(sleep_info_cmp(si, &cur) > 0) {
+        long d = si->t.tv_usec - cur.t.tv_usec;
         int t = 0;
         if(d < -500000) t = -1;
         else if(d > 500000) t = 1;
-        return si.t.tv_sec - cur.t.tv_sec - t;
+        return si->t.tv_sec - cur.t.tv_sec - t;
     }
+    free(si);
     return 0;
 }
 
@@ -88,29 +99,34 @@ int conanosleep(const struct timespec *req, struct timespec *rem)
         return nanosleep(req, rem);
     }
     int ret = 0;
-    struct sleep_info si;
+    struct sleep_info *si = malloc(sizeof(*si));
     struct sleep_info cur;
     time_t tv_sec = req->tv_sec;
     long   tv_usec = req->tv_nsec / 1000;
-    si.coid = coid();
-    gettimeofday(&si.t, NULL);
-    si.t.tv_sec += tv_sec;
-    si.t.tv_usec += tv_usec;
-    if(si.t.tv_usec > 1000000) {
-        si.t.tv_sec++;
-        si.t.tv_usec -= 1000000;
+    if(!si) {
+        *rem = *req;
+        errno = ENOMEM;
+        return -1;
     }
-    rb_init_node(&si.rb);
-    rb_insert(&sleep_info_root, &si, rb, sleep_info_cmp);
+    si->coid = coid();
+    gettimeofday(&si->t, NULL);
+    si->t.tv_sec += tv_sec;
+    si->t.tv_usec += tv_usec;
+    if(si->t.tv_usec > 1000000) {
+        si->t.tv_sec++;
+        si->t.tv_usec -= 1000000;
+    }
+    rb_init_node(&si->rb);
+    rb_insert(&sleep_info_root, si, rb, sleep_info_cmp);
     cowait();
-    rb_erase(&si.rb, &sleep_info_root);
+    rb_erase(&si->rb, &sleep_info_root);
     gettimeofday(&cur.t, NULL);
-    if(sleep_info_cmp(&si, &cur) > 0) {
+    if(sleep_info_cmp(si, &cur) > 0) {
         errno = EINTR;
         ret = -1;
         if(rem) {
-            long us = si.t.tv_usec - cur.t.tv_usec;
-            rem->tv_sec = si.t.tv_sec - cur.t.tv_sec;
+            long us = si->t.tv_usec - cur.t.tv_usec;
+            rem->tv_sec = si->t.tv_sec - cur.t.tv_sec;
             if(us < 0) {
                 rem->tv_sec--;
                 us += 1000000;
@@ -118,6 +134,7 @@ int conanosleep(const struct timespec *req, struct timespec *rem)
             rem->tv_nsec = us * 1000 + req->tv_nsec % 1000;
         }
     }
+    free(si);
     return ret;
 }
 

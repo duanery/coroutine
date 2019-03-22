@@ -167,7 +167,7 @@ int register_coevent(int fd, coevent_handler_t h, void *data)
     coevent = malloc(sizeof(struct coevent_info));
     if(unlikely(coevent == NULL))
         return -1;
-    coevent->coid = cocreate(128*1024, event_routine, coevent);
+    coevent->coid = cocreate(DEFAULT_STACK, event_routine, coevent);
     coevent->fd = fd;
     coevent->handle = h;
     coevent->data = data;

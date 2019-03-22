@@ -20,7 +20,7 @@ void f1(void *unused)
     struct timeval tv, tv1;
     printf("myid = %d\n", coid());
     gettimeofday(&tv, NULL);
-    cousleep(coid()*100000);
+    cousleep(coid()*10000);
     gettimeofday(&tv1, NULL);
     printf("cosleep %d us\n", (tv1.tv_sec - tv.tv_sec)*1000000+tv1.tv_usec - tv.tv_usec);
 }
@@ -30,7 +30,7 @@ void f(void *unused)
     int i=5;
     while(i>0) {
         printf("i=%d\n", i);
-        cocreate(16*1024, f1, NULL);
+        cocreate(AUTOSTACK, f1, NULL);
         i--;
         schedule();
     }
@@ -183,25 +183,41 @@ void bind_listen(unsigned short port, void *handle) {
 }
 
 
-int stack_loop = 0;
-void buf()
+#define MAXRAND 400
+void buf(int loop)
 {
-    char buff[512];
+    uint8_t buff[512];
     int i = 0;
-    for(;i<128;i++)
-        buff[i] = (unsigned char)stack_loop;
-    if(++stack_loop >= 60 ) return;
-    buf();
-    printf("coid %d, buff %d\n", coid(), buff[0]);
+    int k = 0;
+    uint8_t c = (uint8_t)loop;
+    if(c == 0) c = 1;
+    for(;i<512;i++)
+        buff[i] = c;
+    if(loop == 0) {
+        schedule();
+        schedule();
+        return;
+    }
+    buf(loop-1);
+    for(i=0;i<512;i++) {
+        if(buff[i] != c) k++;
+    }
+    if(k)
+        printf("coid %d, buff %d, %d\n", coid(), buff[0], k);
 }
 void pagefault(void *d)
 {
-    buf();
+    int loop = rand() % MAXRAND;
+    buf(loop);
+    buf(loop);
 }
 
 void main()
 {
-    cocreate(AUTOSTACK, pagefault, NULL);
+    int i=0;
+    srand(time(0));
+    for(; i<MAXRAND; i++)
+        cocreate(AUTOSTACK, pagefault, NULL);
     while(schedule());
     
     signalfd_init();

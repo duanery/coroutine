@@ -10,7 +10,10 @@ void cokill(int coid);
 int cowait();
 void cowakeup(int coid);
 #define AUTOSTACK 0
-#define STACK_GROW 2 /* pages */
+#define CO_STACK_BOTTOM 0x20000000000
+#define COPY_STACK (128*1024)
+#define MMAP_STACK (4*1024*1024)
+#define DEFAULT_STACK COPY_STACK
 
 
 //syscall.c

@@ -1,8 +1,9 @@
+.text
 .globl switch_to
 switch_to:
 	/*
 	 * Save callee-saved registers
-	 * This must match the order in inactive_task_frame
+	 * This must match the order in stack_frame
 	 */
 	pushq	%rbp
 	pushq	%rbx
@@ -10,9 +11,19 @@ switch_to:
 	pushq	%r13
 	pushq	%r14
 	pushq	%r15
-
+    
+    /* save prev stack */
+    movq	%rsp, 0(%rdi)
+    
 	/* switch stack */
-	movq	%rsp, 0(%rdi)
+    leaq    __switch_stack_end(%rip), %rsp
+    pushq   %rsi
+    pushq   %rdi
+    call    __switch_stack
+    
+    /* restore next stack */
+    popq    %rdi
+    popq    %rsi
 	movq	0(%rsi), %rsp
 
 	/* restore callee-saved registers */
@@ -25,3 +36,7 @@ switch_to:
 
 	jmp	__switch_to
 
+.data
+.balign 4096
+    .fill 4096,1,0
+__switch_stack_end:
