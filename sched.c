@@ -373,7 +373,7 @@ static void do_page_fault(int sig, siginfo_t *siginfo, void *u)
     printf("addr %016"PRIx64"\n", addr);
     printf("Call Trace:\n");
 
-    exit(128+SIGKILL);
+    exit(128+SIGSEGV);
 }
 
 static __init void co_init()
@@ -403,5 +403,5 @@ static __init void co_init()
     sa.sa_sigaction = do_page_fault;
     sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
     sigemptyset(&sa.sa_mask);
-    sigaction(SIGKILL, &sa, NULL);
+    sigaction(SIGSEGV, &sa, NULL);
 }

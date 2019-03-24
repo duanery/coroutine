@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/signalfd.h>
+#include <string.h>
 
 #include "co.h"
 
@@ -144,6 +145,14 @@ void response_handle(int fd, void *data)
     }
 }
 
+void ab_handle(int fd, void *data)
+{
+    const char *response_str = "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: 11\r\n\r\nhello world\r\n";
+    char buf[256];
+    int len = coread(fd, buf, sizeof(buf));
+    cowrite(fd, response_str, strlen(response_str));
+}
+
 void listenfd_handler(int listen_fd, void *data)
 {
     struct sockaddr_storage from;
@@ -158,6 +167,7 @@ void listenfd_handler(int listen_fd, void *data)
     }
     printf("listen return\n");
 }
+
 
 void bind_listen(unsigned short port, void *handle) {
     int listen_fd           = socket(AF_INET, SOCK_STREAM, 0);
@@ -228,6 +238,7 @@ void main()
     cocreate(16*1024, f, NULL);
     bind_listen(55667, echo_handler);
     bind_listen(55668, response_handle);
+    bind_listen(8080, ab_handle);
     while(1) {
         coloop();
     }
