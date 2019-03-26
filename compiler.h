@@ -19,6 +19,13 @@
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
 
+
+#if defined(__i386__)
+    #define asmlinkage __attribute__((regparm(3)))
+#else
+    #define asmlinkage
+#endif
+
 /*
  * Compares two integer values
  *

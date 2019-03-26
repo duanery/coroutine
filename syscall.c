@@ -12,7 +12,7 @@
 #include "co.h"
 
 struct sleep_info {
-    int coid;
+    void *co;
     struct timeval t;
     struct rb_node rb;
 };
@@ -40,7 +40,7 @@ int cousleep(useconds_t us)
         errno = ENOMEM;
         return -1;
     }
-    si->coid = coid();
+    si->co = coself();
     gettimeofday(&si->t, NULL);
     si->t.tv_sec += tv_sec;
     si->t.tv_usec += tv_usec;
@@ -73,7 +73,7 @@ unsigned int cosleep(unsigned int seconds)
         errno = ENOMEM;
         return seconds;
     }
-    si->coid = coid();
+    si->co = coself();
     gettimeofday(&si->t, NULL);
     si->t.tv_sec += seconds;
     rb_init_node(&si->rb);
@@ -108,7 +108,7 @@ int conanosleep(const struct timespec *req, struct timespec *rem)
         errno = ENOMEM;
         return -1;
     }
-    si->coid = coid();
+    si->co = coself();
     gettimeofday(&si->t, NULL);
     si->t.tv_sec += tv_sec;
     si->t.tv_usec += tv_usec;
@@ -164,7 +164,7 @@ static void co_wakeup()
         gettimeofday(&cur.t, NULL);
         rb_for_each_entry(si, &sleep_info_root, rb) {
             if(sleep_info_cmp(si, &cur) <= 0) {
-                cowakeup(si->coid);
+                __cowakeup(si->co);
             }
             else
                 break;

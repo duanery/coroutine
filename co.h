@@ -4,13 +4,19 @@
 //sched.c
 typedef void (*co_routine)(void *);
 int schedule();
-int cocreate(int stack_size, co_routine f, void *d);
+unsigned long cocreate(int stack_size, co_routine f, void *d);
 int coid();
+void *coself();
 void cokill(int coid);
 int cowait();
+void __cowakeup(void *c);
 void cowakeup(int coid);
 #define AUTOSTACK 0
-#define CO_STACK_BOTTOM 0x20000000000
+#if defined(__x86_64__)
+    #define CO_STACK_BOTTOM 0x20000000000
+#elif defined(__i386__)
+    #define CO_STACK_BOTTOM 0x80000000
+#endif
 #define COPY_STACK (128*1024)
 #define MMAP_STACK (4*1024*1024)
 #define DEFAULT_STACK COPY_STACK

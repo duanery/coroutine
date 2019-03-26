@@ -131,7 +131,7 @@ void event_loop(int timeout)
 
 
 struct coevent_info {
-    int coid;
+    void *co;
     int fd;
     coevent_handler_t handle;
     void *data;
@@ -142,12 +142,14 @@ static void event_wakeup(int fd, int events, void *data)
 {
     struct coevent_info *coevent = data;
     coevent->events = events;
-    cowakeup(coevent->coid);
+    __cowakeup(coevent->co);
 }
 
 static void event_routine(void *data)
 {
     struct coevent_info *coevent = data;
+    
+    coevent->co = coself();
     
     register_event(coevent->fd, event_wakeup, coevent);
     
@@ -167,7 +169,7 @@ int register_coevent(int fd, coevent_handler_t h, void *data)
     coevent = malloc(sizeof(struct coevent_info));
     if(unlikely(coevent == NULL))
         return -1;
-    coevent->coid = cocreate(DEFAULT_STACK, event_routine, coevent);
+    cocreate(DEFAULT_STACK, event_routine, coevent);
     coevent->fd = fd;
     coevent->handle = h;
     coevent->data = data;

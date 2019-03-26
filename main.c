@@ -60,8 +60,8 @@ void signal_routine(int sfd, void *d)
             handle_error("read"); 
 
         extern struct co_info {
-            uint64_t max_stack_consumption;
-            uint64_t co_num;
+            unsigned long max_stack_consumption;
+            unsigned long co_num;
         } co_info;
         printf("max_stack_consumption %u co_num %u\n", co_info.max_stack_consumption, co_info.co_num);
         
