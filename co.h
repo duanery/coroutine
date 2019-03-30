@@ -33,7 +33,7 @@ int coread1(int fd, void *buf, size_t count);
 int cowrite(int fd, const void *buf, size_t count);
 #include <sys/socket.h>
 int coaccept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-void coloop();
+int coloop();
 
 
 //event.c

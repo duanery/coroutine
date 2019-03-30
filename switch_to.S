@@ -37,8 +37,8 @@ switch_to:
     popl    %ebp
 #elif defined(__x86_64__)
 /*
- * %rdi: prev task
- * %rsi: next task
+ * %rdi: prev co
+ * %rsi: next co
  */
     /*
      * Save callee-saved registers

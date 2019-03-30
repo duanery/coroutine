@@ -172,7 +172,6 @@ static void co_wakeup()
     }
 }
 
-
 //对read的封装
 int coread(int fd, void *buf, size_t count)
 {
@@ -254,10 +253,13 @@ reaccept:
     return ret;
 }
 
-extern void event_loop(int timeout);
-void coloop()
+extern int event_loop(int timeout);
+extern int __coloop();
+int coloop()
 {
+    int loop;
     while(schedule());
-    event_loop(co_timeout());
+    loop = event_loop(co_timeout());
     co_wakeup();
+    return loop || __coloop();
 }

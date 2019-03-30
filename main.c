@@ -228,7 +228,7 @@ void main()
     srand(time(0));
     for(; i<MAXRAND; i++)
         cocreate(AUTOSTACK, pagefault, NULL);
-    while(schedule());
+    while(coloop());
     
     signalfd_init();
     signal(SIGPIPE, SIG_IGN);
@@ -239,7 +239,5 @@ void main()
     bind_listen(55667, echo_handler);
     bind_listen(55668, response_handle);
     bind_listen(8080, ab_handle);
-    while(1) {
-        coloop();
-    }
+    while(coloop());
 }

@@ -277,7 +277,7 @@ static void __new()
     current->func(current->data);
     //通过exit字段标识协程执行完毕
     current->exit = 1;
-    //调度，切换到下一个协程
+    //调度，切换到下一个协程，不再返回
     schedule();
 }
 
@@ -369,6 +369,11 @@ void cowakeup(int coid)
     __cowakeup(co);
 }
 
+int __coloop()
+{
+    return !RB_EMPTY_ROOT(&co_root);
+}
+
 static void do_page_fault(int sig, siginfo_t *siginfo, void *u)
 {
     ucontext_t *ucontext = u;
@@ -401,9 +406,6 @@ static void do_page_fault(int sig, siginfo_t *siginfo, void *u)
 static __init void co_init()
 {
     int pagesize = getpagesize();
-    
-    rb_init_node(&init.rb);
-    rb_insert(&co_root, &init, rb, co_cmp);
     
     co_stack_bottom = mmap((void*)CO_STACK_BOTTOM - pagesize, pagesize, 
                         PROT_READ | PROT_WRITE,

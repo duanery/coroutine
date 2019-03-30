@@ -107,18 +107,21 @@ int modify_event(int fd, unsigned int new_events)
     return 0;
 }
 //timeout：单位是微妙
-void event_loop(int timeout)
+//return：是否继续循环，1：继续，0：不再继续
+int event_loop(int timeout)
 {
     int i, nr;
     
     if (timeout >= 0 && timeout < 1000) {
         usleep(timeout);
-        return;
+        return 1;
     }
+    // 无事件也不需要超时
+    if(RB_EMPTY_ROOT(&events_tree) && timeout < 0) return 0;
     nr = epoll_wait(efd, events, nr_events, timeout<0 ? -1 : timeout/1000);
     if (nr < 0) {
         if (errno == EINTR)
-            return;
+            return 1;
         exit(1);
     } else if (nr) {
         for (i = 0; i < nr; i++) {
@@ -127,8 +130,8 @@ void event_loop(int timeout)
             ei->handle(ei->fd, events[i].events, ei->data);
         }
     }
+    return 1;
 }
-
 
 struct coevent_info {
     void *co;
