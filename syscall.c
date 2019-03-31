@@ -18,6 +18,21 @@ struct sleep_info {
 };
 
 static struct rb_root sleep_info_root = RB_ROOT;
+static int key_sleep = -1;
+
+//cokill，确保能销毁协程的sleep_info信息
+static void sleep_info_cleanup(void *d)
+{
+    struct sleep_info *si = d;
+    rb_erase(&si->rb, &sleep_info_root);
+    free(si);
+}
+
+static void __init init_syscall()
+{
+    key_sleep = co_key_create(sleep_info_cleanup);
+}
+
 
 static inline int sleep_info_cmp(struct sleep_info *s1, struct sleep_info *s2)
 {
@@ -50,7 +65,9 @@ int cousleep(useconds_t us)
     }
     rb_init_node(&si->rb);
     rb_insert(&sleep_info_root, si, rb, sleep_info_cmp);
+    co_setspecific(key_sleep, si);
     cowait();
+    co_setspecific(key_sleep, NULL);
     rb_erase(&si->rb, &sleep_info_root);
     gettimeofday(&cur.t, NULL);
     if(sleep_info_cmp(si, &cur) > 0) {
@@ -78,7 +95,9 @@ unsigned int cosleep(unsigned int seconds)
     si->t.tv_sec += seconds;
     rb_init_node(&si->rb);
     rb_insert(&sleep_info_root, si, rb, sleep_info_cmp);
+    co_setspecific(key_sleep, si);
     cowait();
+    co_setspecific(key_sleep, NULL);
     rb_erase(&si->rb, &sleep_info_root);
     gettimeofday(&cur.t, NULL);
     if(sleep_info_cmp(si, &cur) > 0) {
@@ -118,7 +137,9 @@ int conanosleep(const struct timespec *req, struct timespec *rem)
     }
     rb_init_node(&si->rb);
     rb_insert(&sleep_info_root, si, rb, sleep_info_cmp);
+    co_setspecific(key_sleep, si);
     cowait();
+    co_setspecific(key_sleep, NULL);
     rb_erase(&si->rb, &sleep_info_root);
     gettimeofday(&cur.t, NULL);
     if(sleep_info_cmp(si, &cur) > 0) {

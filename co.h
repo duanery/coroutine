@@ -4,6 +4,7 @@
 //sched.c
 typedef void (*co_routine)(void *);
 int schedule();
+#define yield schedule
 unsigned long cocreate(int stack_size, co_routine f, void *d);
 int coid();
 void *coself();
@@ -11,6 +12,10 @@ void cokill(int coid);
 int cowait();
 void __cowakeup(void *c);
 void cowakeup(int coid);
+int co_key_create(void (*destructor)(void*));
+int co_key_delete(int key);
+void *co_getspecific(int key);
+int co_setspecific(int key, const void *value);
 #define AUTOSTACK 0
 #if defined(__x86_64__)
     #define CO_STACK_BOTTOM 0x20000000000

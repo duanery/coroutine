@@ -14,7 +14,10 @@ static int efd;
 static struct rb_root events_tree = RB_ROOT;
 static struct epoll_event *events;
 static int nr_events;
+static int key_event;
+static int key_coevent;
 
+static void coevent_cleanup(void *data);
 static void __init init_event()
 {
     nr_events = 1024;
@@ -25,6 +28,8 @@ static void __init init_event()
     if (efd < 0) {
         //TODO
     }
+    key_event = co_key_create(NULL);
+    key_coevent = co_key_create(coevent_cleanup);
 }
 
 struct event_info {
@@ -89,8 +94,15 @@ int modify_event(int fd, unsigned int new_events)
     int ret;
     struct epoll_event ev;
     struct event_info *ei;
-
-    ei = lookup_event(fd);
+    
+    if(coid() != 0) {
+        ei = co_getspecific(key_event);
+        if(!ei || ei->fd != fd) {
+            ei = lookup_event(fd);
+            co_setspecific(key_event, ei);
+        }
+    }else
+        ei = lookup_event(fd);
     if (!ei) {
         return 1;
     }
@@ -116,7 +128,7 @@ int event_loop(int timeout)
         usleep(timeout);
         return 1;
     }
-    // 无事件也不需要超时
+    // 无事件也不需要超时，返回0
     if(RB_EMPTY_ROOT(&events_tree) && timeout < 0) return 0;
     nr = epoll_wait(efd, events, nr_events, timeout<0 ? -1 : timeout/1000);
     if (nr < 0) {
@@ -141,28 +153,38 @@ struct coevent_info {
     int events;
 };
 
-static void event_wakeup(int fd, int events, void *data)
+static void coevent_wakeup(int fd, int events, void *data)
 {
     struct coevent_info *coevent = data;
     coevent->events = events;
     __cowakeup(coevent->co);
 }
 
-static void event_routine(void *data)
+//cokill，确保能销毁协程的coevent_info信息
+static void coevent_cleanup(void *data)
 {
     struct coevent_info *coevent = data;
-    
-    coevent->co = coself();
-    
-    register_event(coevent->fd, event_wakeup, coevent);
-    
-    coevent->handle(coevent->fd, coevent->data);
     
     unregister_event(coevent->fd);
     
     close(coevent->fd);
     
     free(coevent);
+}
+
+static void coevent_routine(void *data)
+{
+    struct coevent_info *coevent = data;
+    
+    coevent->co = coself();
+    
+    register_event(coevent->fd, coevent_wakeup, coevent);
+    
+    co_setspecific(key_coevent, data);
+    coevent->handle(coevent->fd, coevent->data);
+    co_setspecific(key_coevent, NULL);
+    
+    coevent_cleanup(data);
 }
 
 int register_coevent(int fd, coevent_handler_t h, void *data)
@@ -172,7 +194,7 @@ int register_coevent(int fd, coevent_handler_t h, void *data)
     coevent = malloc(sizeof(struct coevent_info));
     if(unlikely(coevent == NULL))
         return -1;
-    cocreate(DEFAULT_STACK, event_routine, coevent);
+    cocreate(DEFAULT_STACK, coevent_routine, coevent);
     coevent->fd = fd;
     coevent->handle = h;
     coevent->data = data;

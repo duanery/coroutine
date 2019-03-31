@@ -10,6 +10,7 @@
 #include <execinfo.h>
 #include <sys/stat.h> /* For mode constants */
 #include <fcntl.h>
+#include <errno.h>
 
 #include "compiler.h"
 #include "rbtree.h"
@@ -46,7 +47,15 @@ typedef struct co_struct {
     void *data;
     struct list_head rq_node;
     struct rb_node rb;
+    void **specific;
+    int spec_num;
 }co_t;
+
+typedef struct co_specific {
+    uint32_t used : 1;
+    void (*destructor)(void*);
+}specific_t;
+
 
 struct co_info {
     unsigned long max_stack_consumption;
@@ -65,6 +74,11 @@ static struct rb_root co_root = RB_ROOT;
 //公共协程栈以及在栈上的协程
 static void *co_stack_bottom = NULL;
 static co_t *co_onstack = NULL;
+
+//协程局部存储键值
+static specific_t *co_specific = NULL;
+static int co_specific_num = 0;
+
 
 static inline int co_cmp(co_t *co1, co_t *co2)
 {
@@ -241,6 +255,17 @@ asmlinkage void __switch_to(co_t *prev, co_t *next)
             shm_unlink(filename);
         } else
             free(prev->stack);
+        //释放线程局部存储
+        if(prev->specific) {
+            int i;
+            for(i = 0; i < prev->spec_num; i++) {
+                if(prev->specific[i] && co_specific[i].destructor) {
+                    co_specific[i].destructor(prev->specific[i]);
+                }
+                prev->specific[i] = NULL;
+            }
+            free(prev->specific);
+        }
         free(prev);
         co_info.co_num--;
     }
@@ -296,6 +321,8 @@ unsigned long cocreate(int stack_size, co_routine f, void *d)
     co->exit = 0;
     co->autostack = 0;
     co->mmapstack = 0;
+    co->specific = NULL;
+    co->spec_num = 0;
     if(stack_size == AUTOSTACK) {
         co->autostack = 1;
         stack_size = pagesize;
@@ -369,9 +396,73 @@ void cowakeup(int coid)
     __cowakeup(co);
 }
 
+//内部使用
 int __coloop()
 {
     return !RB_EMPTY_ROOT(&co_root);
+}
+
+//协程局部存储
+int co_key_create(void (*destructor)(void*))
+{
+    specific_t *specific = co_specific;
+    specific_t *specific_end = specific + co_specific_num;
+    int old_num = co_specific_num;
+    while(specific < specific_end) {
+        if(!specific->used) {
+            specific->used = 1;
+            specific->destructor = destructor;
+            return specific - co_specific;
+        }
+        specific++;
+    }
+    co_specific_num += 16;
+    co_specific = realloc(co_specific, co_specific_num * sizeof(specific_t));
+    memset(co_specific + old_num, 0, 16 * sizeof(specific_t));
+    co_specific[old_num].used = 1;
+    co_specific[old_num].destructor = destructor;
+    return old_num;
+}
+
+int co_key_delete(int key)
+{
+    if(unlikely(key < 0) || 
+        co_specific_num <= key ||
+        !co_specific[key].used) {
+        return EINVAL;
+    }
+    co_specific[key].used = 0;
+    co_specific[key].destructor = NULL;
+    return 0;
+}
+
+void *co_getspecific(int key)
+{
+    if(unlikely(key < 0) || 
+        co_specific_num <= key ||
+        !co_specific[key].used) {
+        return NULL;
+    }
+    if(current->spec_num <= key)
+        return NULL;
+    else
+        return current->specific[key];
+}
+
+int co_setspecific(int key, const void *value)
+{
+    if(unlikely(key < 0) || 
+        co_specific_num <= key ||
+        !co_specific[key].used) {
+        return EINVAL;
+    }
+    if(current->spec_num <= key) {
+        current->specific = realloc(current->specific, (key+1)*sizeof(void *));
+        memset(current->specific + current->spec_num, 0, (key+1-current->spec_num)*sizeof(void *));
+        current->spec_num = key+1;
+    }
+    current->specific[key] = (void *)value;
+    return 0;
 }
 
 static void do_page_fault(int sig, siginfo_t *siginfo, void *u)
