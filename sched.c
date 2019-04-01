@@ -457,9 +457,9 @@ int co_setspecific(int key, const void *value)
         return EINVAL;
     }
     if(current->spec_num <= key) {
-        current->specific = realloc(current->specific, (key+1)*sizeof(void *));
-        memset(current->specific + current->spec_num, 0, (key+1-current->spec_num)*sizeof(void *));
-        current->spec_num = key+1;
+        current->specific = realloc(current->specific, co_specific_num*sizeof(void *));
+        memset(current->specific + current->spec_num, 0, (co_specific_num-current->spec_num)*sizeof(void *));
+        current->spec_num = co_specific_num;
     }
     current->specific[key] = (void *)value;
     return 0;
