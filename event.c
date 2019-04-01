@@ -180,6 +180,8 @@ static void coevent_routine(void *data)
     
     register_event(coevent->fd, coevent_wakeup, coevent);
     
+    //使用协程局部存储来存放coevent_info结构
+    //在协程被cokill后，可以调用coevent_cleanup来销毁coevent_info信息
     co_setspecific(key_coevent, data);
     coevent->handle(coevent->fd, coevent->data);
     co_setspecific(key_coevent, NULL);
