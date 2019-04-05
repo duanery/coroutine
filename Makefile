@@ -1,6 +1,6 @@
 SRC := switch_to.S sched.c rbtree.c syscall.c event.c
 HEADER := co.h  compiler.h  list.h  rbtree.h
-OBJS := main example_echo example_signalfd example_autostack example_co example_specific
+OBJS := main example_echo example_signalfd example_autostack example_co example_specific example_teststack
 
 CFLAGS += -g -O2 -std=gnu99 -Wp,-MMD,.$(notdir $@).d
 

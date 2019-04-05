@@ -74,11 +74,11 @@ static struct rb_root co_root = RB_ROOT;
 //公共协程栈以及在栈上的协程
 static void *co_stack_bottom = NULL;
 static co_t *co_onstack = NULL;
+unsigned long COPY_STACK = DEFAULT_STACK;
 
 //协程局部存储键值
 static specific_t *co_specific = NULL;
 static int co_specific_num = 0;
-
 
 static inline int co_cmp(co_t *co1, co_t *co2)
 {
@@ -193,10 +193,15 @@ asmlinkage void __switch_stack(co_t *prev, co_t *next)
             memcpy(to, from, stack_size);
         } else {
             // 4)
-            void *ptr = mmap(co_stack_bottom - next->stack_size, next->stack_size, 
-                            PROT_READ | PROT_WRITE, 
-                            MAP_SHARED | MAP_FIXED, 
-                            next->shmfd, 0);
+            void *ptr;
+            ptr = mmap(co_stack_bottom - stack_size, stack_size, 
+                        PROT_READ | PROT_WRITE, 
+                        MAP_SHARED | MAP_FIXED | MAP_POPULATE, 
+                        next->shmfd, next->stack_size - stack_size);
+            ptr = mmap(co_stack_bottom - next->stack_size, next->stack_size - stack_size, 
+                        PROT_READ | PROT_WRITE, 
+                        MAP_SHARED | MAP_FIXED, 
+                        next->shmfd, 0);
             if(ptr == MAP_FAILED &&
                 ptr != co_stack_bottom - next->stack_size) {
                 printf("build mmap stack for coid %d failed, %m", next->id);

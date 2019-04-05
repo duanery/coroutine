@@ -22,9 +22,9 @@ int co_setspecific(int key, const void *value);
 #elif defined(__i386__)
     #define CO_STACK_BOTTOM 0x80000000
 #endif
-#define COPY_STACK (128*1024)
+extern unsigned long COPY_STACK;
 #define MMAP_STACK (4*1024*1024)
-#define DEFAULT_STACK COPY_STACK
+#define DEFAULT_STACK (128*1024)
 
 
 //syscall.c
