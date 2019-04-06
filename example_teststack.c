@@ -17,14 +17,14 @@ static int g_us = 0;
 
 unsigned long long counter(void)
 {
-	register uint32_t lo, hi;
-	register unsigned long long o;
-	__asm__ __volatile__ (
-			"rdtscp" : "=a"(lo), "=d"(hi)::"%rcx"
-			);
-	o = hi;
-	o <<= 32;
-	return (o | lo);
+    register uint32_t lo, hi;
+    register unsigned long long o;
+    __asm__ __volatile__ (
+            "rdtscp" : "=a"(lo), "=d"(hi)::"%rcx"
+            );
+    o = hi;
+    o <<= 32;
+    return (o | lo);
 }
 
 #define debug(...) \
