@@ -15,6 +15,7 @@ static int g_verbose = 0;
 static int g_loop = 100;
 static int g_us = 0;
 
+#if defined(__i386__) || defined(__x86_64__)
 unsigned long long counter(void)
 {
 	register uint32_t lo, hi;
@@ -26,6 +27,12 @@ unsigned long long counter(void)
 	o <<= 32;
 	return (o | lo);
 }
+#elif defined(__aarch64__)
+unsigned long long counter(void)
+{
+    return 0;
+}
+#endif
 
 #define debug(...) \
     if(g_verbose) printf(__VA_ARGS__);
@@ -139,7 +146,7 @@ void main(int argc, char *argv[])
     return;
 
 
-_copy:    
+_copy:
     //COPY test
     for(i=0; i<n; i++)
         cocreate(AUTOSTACK, test_copy_stack, (void*)(size_t)stack_size);

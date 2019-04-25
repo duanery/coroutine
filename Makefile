@@ -8,6 +8,8 @@ ifeq ($(ARCH), i386)
     CFLAGS += -m32
     ASFLAGS += -m32
 endif
+CC		= $(CROSS_COMPILE)gcc
+AR		= $(CROSS_COMPILE)ar
 
 all:$(OBJS)
 	@:

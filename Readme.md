@@ -6,6 +6,9 @@
 
 键入make命令，可以编译出一个main程序。运行main程序获得结果。
 
+- 交叉32位程序。`make ARCH=i386`
+- 编译arm64位程序。`make CROSS_COMPILE=aarch64-linux-gnu-`
+
 ## 原理
 
 ### 1.相关结构体
@@ -277,7 +280,7 @@ init协程是其他协程的管理员，其他协程执行完最终控制权会�
 
 可以参考Linux内核中其他体系结构的switch_to的代码。
 
-目前已支持`i386,x86_64`.
+目前已支持`i386,x86_64,aarch64`.
 
 ### 4.协程退出状态
 
@@ -365,3 +368,46 @@ epoll轮询的问题：当epoll返回一个套接字可以读，去读的时候�
 ### 3.遗留问题
 
 1. 等待一个协程执行完。
+
+## ARM测试
+
+### 在x86_64环境下测试arm64位程序
+
+1. 从libaro官网获得交叉编译工具。<https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/>
+
+   ```bash
+   mkdir -p /home/arm64
+   cd /home/arm64
+   xz -d gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu.tar.gz
+   tar -xvf gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu.tar
+   export PATH=$PATH:/home/arm64/gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu/bin
+   ```
+
+2. 编译qemu-aarch64。下载qemu源码，进入qemu目录。
+
+   ```bash
+   ./configure --target-list=aarch64-linux-user
+   make && make install
+   ```
+
+   安装后可获得qemu-aarch64程序，通过这个程序可以直接执行arm64位程序，而不需要arm64位虚拟机。
+
+3. 编译协程例子。下载本demo代码，编译。
+
+   ```bash
+   git clone git@github.com:duanery/coroutine.git
+   cd coroutine
+   make CROSS_COMPILE=aarch64-linux-gnu-
+   ```
+
+4. 测试
+
+   ```bash
+   qemu-aarch64 -L /home/arm64/gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu/aarch64-linux-gnu/libc/ ./example_co
+   ```
+
+   通过-L参数来指定arm64体系结构解释器的路径。
+
+### arm64环境下测试
+
+​	未验证。

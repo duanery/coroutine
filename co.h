@@ -17,7 +17,7 @@ int co_key_delete(int key);
 void *co_getspecific(int key);
 int co_setspecific(int key, const void *value);
 #define AUTOSTACK 0
-#if defined(__x86_64__)
+#if defined(__x86_64__) || defined(__aarch64__)
     #define CO_STACK_BOTTOM 0x20000000000
 #elif defined(__i386__)
     #define CO_STACK_BOTTOM 0x80000000

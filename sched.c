@@ -30,6 +30,18 @@ typedef struct stack_frame {
     unsigned long edi;
     unsigned long ebx;
     unsigned long ebp;
+#elif defined(__aarch64__)
+    unsigned long x19;
+    unsigned long x20;
+    unsigned long x21;
+    unsigned long x22;
+    unsigned long x23;
+    unsigned long x24;
+    unsigned long x25;
+    unsigned long x26;
+    unsigned long x27;
+    unsigned long x28;
+    unsigned long x29;
 #endif
     unsigned long ret;
 }frame_t;
@@ -488,6 +500,13 @@ static void do_page_fault(int sig, siginfo_t *siginfo, void *u)
     #define P(r) printf("  %-3s %08" PRIx32 "\n", #r, sigctx->r)
     P(edi); P(esi); P(ebp); P(esp); P(ebx); P(edx); P(ecx); P(eax);
     P(eip);
+#elif defined(__aarch64__)
+    int i;
+    for(i=0; i<31; i++) {
+        printf("  x%02d %016" PRIx64 "\n", i, sigctx->regs[i]);
+    }
+    printf("  %-3s %016" PRIx64 "\n", "sp", sigctx->sp);
+    printf("  %-3s %016" PRIx64 "\n", "pc", sigctx->pc);
 #endif
     if(!current->autostack)
         printf("coid %d stack %016"PRIx64" - %016"PRIx64"\n", coid(), stack, stack+stack_size);
