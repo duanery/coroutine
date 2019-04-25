@@ -18,14 +18,14 @@ static int g_us = 0;
 #if defined(__i386__) || defined(__x86_64__)
 unsigned long long counter(void)
 {
-	register uint32_t lo, hi;
-	register unsigned long long o;
-	__asm__ __volatile__ (
-			"rdtscp" : "=a"(lo), "=d"(hi)::"%rcx"
-			);
-	o = hi;
-	o <<= 32;
-	return (o | lo);
+    register uint32_t lo, hi;
+    register unsigned long long o;
+    __asm__ __volatile__ (
+            "rdtscp" : "=a"(lo), "=d"(hi)::"%rcx"
+            );
+    o = hi;
+    o <<= 32;
+    return (o | lo);
 }
 #elif defined(__aarch64__)
 unsigned long long counter(void)
