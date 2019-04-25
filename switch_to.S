@@ -90,9 +90,9 @@ switch_to:
     stp x29, x30, [sp, 0x50]
     
     # Save stack pointer to x0 (prev co)
-	mov x2, sp
-	str x2, [x0, 0]
-    
+    mov x2, sp
+    str x2, [x0, 0]
+
     mov x19, x0
     mov x20, x1
     ldr x2, =__switch_stack_end
@@ -100,17 +100,17 @@ switch_to:
     bl __switch_stack
     mov x0, x19
     mov x1, x20
-    
+
     # Load stack pointer from x1 (next co)
-	ldr x2, [x1, 0]
-	mov sp, x2
-    
+    ldr x2, [x1, 0]
+    mov sp, x2
+
     ldp x19, x20, [sp, 0x00]
-	ldp x21, x22, [sp, 0x10]
-	ldp x23, x24, [sp, 0x20]
-	ldp x25, x26, [sp, 0x30]
-	ldp x27, x28, [sp, 0x40]
-	ldp x29, x30, [sp, 0x50]
+    ldp x21, x22, [sp, 0x10]
+    ldp x23, x24, [sp, 0x20]
+    ldp x25, x26, [sp, 0x30]
+    ldp x27, x28, [sp, 0x40]
+    ldp x29, x30, [sp, 0x50]
     add sp, sp, 0x60
     
     b __switch_to
