@@ -19,7 +19,7 @@ call_to:
     pushl   %esi
     
     /* save prev stack */
-    movl    %esp, CO_rsp(%eax)
+    movl    %esp, CO_rsp(%eax)         //  prev->rsp = %rsp;
     
     cmpl    $0, CO_rsp(%edx)           //  if (next->esp != 0)
     jne 1f                             //      goto _1f;
@@ -50,7 +50,7 @@ call_to:
     pushq   %r15
     
     /* save prev stack */
-    movq    %rsp, CO_rsp(%rdi)
+    movq    %rsp, CO_rsp(%rdi)         //  prev->rsp = %rsp;
     
     cmpl    $0, CO_rsp(%rsi)           //  if (next->esp != 0)
     jne     1f                         //      goto _1f;
