@@ -1,3 +1,5 @@
+#include "co_offsets.h"
+
 .text
 .globl switch_to
 switch_to:
@@ -17,7 +19,7 @@ switch_to:
     pushl   %esi
     
     /* save prev stack */
-    movl    %esp, 0(%eax)
+    movl    %esp, CO_rsp(%eax)
     
     /* switch stack */
     movl    $__switch_stack_end, %esp
@@ -28,7 +30,7 @@ switch_to:
     /* restore next stack */
     popl    %edx
     popl    %eax
-    movl    0(%edx), %esp
+    movl    CO_rsp(%edx), %esp
     
     /* restore callee-saved registers */
     popl    %esi
@@ -54,7 +56,7 @@ switch_to:
     pushq   %r15
     
     /* save prev stack */
-    movq    %rsp, 0(%rdi)
+    movq    %rsp, CO_rsp(%rdi)
     
     /* switch stack */
     leaq    __switch_stack_end(%rip), %rsp
@@ -65,7 +67,7 @@ switch_to:
     /* restore next stack */
     popq    %rdi
     popq    %rsi
-    movq    0(%rsi), %rsp
+    movq    CO_rsp(%rsi), %rsp
 
     /* restore callee-saved registers */
     popq    %r15
@@ -91,7 +93,7 @@ switch_to:
     
     # Save stack pointer to x0 (prev co)
     mov x2, sp
-    str x2, [x0, 0]
+    str x2, [x0, CO_rsp]
 
     mov x19, x0
     mov x20, x1
@@ -102,7 +104,7 @@ switch_to:
     mov x1, x20
 
     # Load stack pointer from x1 (next co)
-    ldr x2, [x1, 0]
+    ldr x2, [x1, CO_rsp]
     mov sp, x2
 
     ldp x19, x20, [sp, 0x00]

@@ -221,13 +221,40 @@ void pagefault(void *d)
     buf(loop);
     buf(loop);
 }
+#include "compiler.h"
+#include "rbtree.h"
+#include "list.h"
+#include "co.h"
+#include "co_inner.h"
+void cocall_test1(void *d)
+{
+    long a = 500000000;
+    long i=0;
+    co_t *cur = coself();
+    printf("OK1, %p, %p, %d\n", &a, (void *)cur->rsp, cur->stack_size);
+    schedule();   //实际不会切出去
+    while(a--)i+=a;
+    printf("i=%ld\n", i);
+}
+void cocall_test(void *d)
+{
+    int a = 5;
+    co_t *cur = coself();
+    printf("OK, %p, %p, %d\n", &a, (void *)cur->rsp, cur->stack_size);
+    cocall(DEFAULT_STACK, cocall_test1, NULL);
+}
 
 void main()
 {
     int i=0;
     srand(time(0));
+    
+    
+    
     for(; i<MAXRAND; i++)
         cocreate(AUTOSTACK, pagefault, NULL);
+    cocall(SHARESTACK, cocall_test, NULL);
+    exit(0);
     while(coloop());
     
     signalfd_init();

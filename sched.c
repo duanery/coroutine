@@ -16,63 +16,10 @@
 #include "rbtree.h"
 #include "list.h"
 #include "co.h"
-
-typedef struct stack_frame {
-#if defined(__x86_64__)
-    unsigned long r15;
-    unsigned long r14;
-    unsigned long r13;
-    unsigned long r12;
-    unsigned long rbx;
-    unsigned long rbp;
-#elif defined(__i386__)
-    unsigned long esi;
-    unsigned long edi;
-    unsigned long ebx;
-    unsigned long ebp;
-#elif defined(__aarch64__)
-    unsigned long x19;
-    unsigned long x20;
-    unsigned long x21;
-    unsigned long x22;
-    unsigned long x23;
-    unsigned long x24;
-    unsigned long x25;
-    unsigned long x26;
-    unsigned long x27;
-    unsigned long x28;
-    unsigned long x29;
-#endif
-    unsigned long ret;
-}frame_t;
-
-typedef struct co_struct {
-    unsigned long rsp;
-    void *stack;
-    int stack_size;
-    unsigned long id;
-    int shmfd;
-    uint32_t exit : 1;
-    uint32_t autostack : 1;
-    uint32_t mmapstack : 1; 
-    co_routine func;
-    void *data;
-    struct list_head rq_node;
-    struct rb_node rb;
-    void **specific;
-    int spec_num;
-}co_t;
-
-typedef struct co_specific {
-    uint32_t used : 1;
-    void (*destructor)(void*);
-}specific_t;
+#include "co_inner.h"
 
 
-struct co_info {
-    unsigned long max_stack_consumption;
-    unsigned long co_num;
-}co_info = {0, 0};
+struct co_info co_info = {0, 0};
 
 // 初始协程, 标识主线程
 static co_t init = {.rq_node = LIST_HEAD_INIT(init.rq_node)};
@@ -237,7 +184,7 @@ asmlinkage void __switch_to(co_t *prev, co_t *next)
     //赋值current, 切换当前协程
     current = next;
     
-    if(prev != &init) {
+    if(likely(prev != &init)) {
         unsigned long stack_bottom;
         if(!prev->autostack)
             stack_bottom = (unsigned long)prev->stack + prev->stack_size;
@@ -248,7 +195,14 @@ asmlinkage void __switch_to(co_t *prev, co_t *next)
     }
     
     //如果前一个协程执行完毕，则释放前一个协程的数据
-    if(prev->exit) {
+    if(unlikely(prev->exit)) {
+        //cocall调用协程，执行完毕。
+        if(prev->type == 1) {
+            if(!prev->sharestack)
+                free(prev->stack);
+            return;
+        }
+        
         list_del(&prev->rq_node);
         rb_erase(&prev->rb, &co_root);
         if(co_onstack == prev) {
@@ -288,10 +242,10 @@ asmlinkage void __switch_to(co_t *prev, co_t *next)
     }
 }
 
-extern asmlinkage void switch_to(co_t *, co_t *);
-
 static int __schedule(bool dequeue)
 {
+    //cocall调用协程，且是共享栈的。
+    bool share = current->type == 1 && current->sharestack == 1;
     /*
      * 选择下一个协程
      * 参考Linux内核的话，可以定义协程队列，并对每个协程定义优先级，
@@ -299,10 +253,15 @@ static int __schedule(bool dequeue)
      * 这里最简处理。
     **/
     co_t *next = list_next_entry(current, rq_node);
-    if(dequeue && current != &init)
+    if(dequeue && likely(current != &init))
         list_del_init(&current->rq_node);
-    //协程切换
-    if(current != next)
+    /*
+     * 协程切换
+     * 1.切换到其他协程，而不是自己。
+     * 2.非共享的，否则切换到next后，next可能调用cocall调用新协程，
+     * 从而破坏栈。 
+    **/
+    if(likely(current != next && !share))
         switch_to(current, next);
     
     return !list_empty(&init.rq_node);
@@ -338,6 +297,8 @@ unsigned long cocreate(int stack_size, co_routine f, void *d)
     co->exit = 0;
     co->autostack = 0;
     co->mmapstack = 0;
+    co->type = 0;
+    co->sharestack = 0;
     co->specific = NULL;
     co->spec_num = 0;
     if(stack_size == AUTOSTACK) {
