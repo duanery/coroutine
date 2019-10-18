@@ -95,7 +95,7 @@ int modify_event(int fd, unsigned int new_events)
     struct epoll_event ev;
     struct event_info *ei;
     
-    if(coid() != 0) {
+    if(likely(coid() != 0)) {
         ei = co_getspecific(key_event);
         if(!ei || ei->fd != fd) {
             ei = lookup_event(fd);
@@ -103,7 +103,7 @@ int modify_event(int fd, unsigned int new_events)
         }
     }else
         ei = lookup_event(fd);
-    if (!ei) {
+    if (unlikely(!ei)) {
         return 1;
     }
     if(ei->events == new_events | EPOLLET) return 0;
@@ -120,22 +120,46 @@ int modify_event(int fd, unsigned int new_events)
 }
 //timeout：单位是微妙
 //return：是否继续循环，1：继续，0：不再继续
+#define MAX_POLLING 128
 int event_loop(int timeout)
 {
     int i, nr;
+    static int polling = MAX_POLLING;
     
-    if (timeout >= 0 && timeout < 1000) {
-        usleep(timeout);
-        return 1;
+    if(RB_EMPTY_ROOT(&events_tree)) {
+        // 无事件也不需要超时，返回0
+        if(timeout < 0) return 0;
+    } else {
+        if(timeout < 0) {
+            /*
+             * 轮询和等待之间的转换
+             * 在有大量的socket被监听，每个socket都有包需要处理时，epoll_wait
+             * 大多数情况会直接返回，少数情况会把进程切换出去，然后其中一个
+             * socket有包的时候，再把进程唤醒。
+             * 进程切换再唤醒会存在较大延迟，会造成一部分包不能及时处理。
+             * 直接的现象是：虽然有大量的包，但进程的cpu占用到不了100%
+             *
+             * 默认采用轮询方式(timeout = 0)，在经过MAX_POLLING次轮询，仍然没有
+             * 任何一个socket有包时就切换到wait模式。
+             * MAX_POLLING = 128：
+             * 是测试到的一个经验值，不断的修改MAX_POLLING的值，通过perf测试进程
+             * 切换次数，当切换次数不再明显减少时，即得到了最佳的值。
+            **/
+            if(polling != 0) {
+                timeout = 0;
+                polling--;
+            }
+        } else
+            polling = MAX_POLLING;
     }
-    // 无事件也不需要超时，返回0
-    if(RB_EMPTY_ROOT(&events_tree) && timeout < 0) return 0;
     nr = epoll_wait(efd, events, nr_events, timeout<0 ? -1 : timeout/1000);
     if (nr < 0) {
         if (errno == EINTR)
             return 1;
         exit(1);
     } else if (nr) {
+        //复位轮询计数器
+        polling = MAX_POLLING;
         for (i = 0; i < nr; i++) {
             struct event_info *ei;
             ei = (struct event_info *)events[i].data.ptr;
