@@ -241,7 +241,7 @@ void cocall_test(void *d)
     int a = 5;
     co_t *cur = coself();
     printf("OK, %p, %p, %d\n", &a, (void *)cur->rsp, cur->stack_size);
-    cocall(DEFAULT_STACK, cocall_test1, NULL);
+    cocall(0, cocall_test1, NULL);
 }
 
 void main()
@@ -253,7 +253,7 @@ void main()
     
     for(; i<MAXRAND; i++)
         cocreate(AUTOSTACK, pagefault, NULL);
-    cocall(SHARESTACK, cocall_test, NULL);
+    cocall(DEFAULT_STACK, cocall_test, NULL);
     exit(0);
     while(coloop());
     

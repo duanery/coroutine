@@ -32,7 +32,22 @@ call_to:
     movl    CO_rsp(%edx), %esp         //  %esp = next->rsp;
     pushl   $__call                    //  *(long*)(++esp) = __call;
     jmp     __switch_to                //  goto __switch_to;
+
+.global return_to
+return_to:
+/*
+ * %eax: prev co
+ * %edx: next co
+ */
+    movl    CO_rsp(%edx), %esp
     
+    /* restore callee-saved registers */
+    popl    %esi
+    popl    %edi
+    popl    %ebx
+    popl    %ebp
+    
+    jmp    __switch_to
 #elif defined(__x86_64__)
 /*
  * %rdi: prev co
@@ -54,14 +69,31 @@ call_to:
     
     cmpl    $0, CO_rsp(%rsi)           //  if (next->esp != 0)
     jne     1f                         //      goto _1f;
-    mov     %rsp, %rbx                 //  %rbx = %rsp;
-    sub     CO_stack(%rsi), %rbx       //  %ebx -= next->stack;
-    mov     %rbx, CO_stack_size(%rsi)  //   next->stack_size = %ebx;
-    mov     %rsp, CO_rsp(%rsi)         //  next->rsp = %esp;
+    movq    %rsp, %rbx                 //  %rbx = %rsp;
+    subq    CO_stack(%rsi), %rbx       //  %ebx -= next->stack;
+    movq    %rbx, CO_stack_size(%rsi)  //   next->stack_size = %ebx;
+    movq    %rsp, CO_rsp(%rsi)         //  next->rsp = %esp;
 1:                                     // _1f:
     /*  restore next stack  */         //
-    mov     CO_rsp(%rsi), %rsp         //  %esp = next->rsp;
+    movq    CO_rsp(%rsi), %rsp         //  %esp = next->rsp;
     pushq   $__call                    //  *(long*)(++esp) = __call;
     jmp     __switch_to                //  goto __switch_to;
+
+.global return_to
+return_to:
+/*
+ * %rdi: prev co
+ * %rsi: next co
+ */
+    movq    CO_rsp(%rsi), %rsp
     
+    /* restore callee-saved registers */
+    popq    %r15
+    popq    %r14
+    popq    %r13
+    popq    %r12
+    popq    %rbx
+    popq    %rbp
+    
+    jmp    __switch_to
 #endif

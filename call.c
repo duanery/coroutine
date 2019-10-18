@@ -21,8 +21,8 @@ void __call()
     current->exit = 1;
     //把父协程插入运行队列
     list_replace_init(&current->rq_node, &parent->rq_node);
-    //切换到父协程，在__switch_to函数中会把子协程销毁
-    switch_to(current, parent);
+    //返回到父协程，在__switch_to函数中会把子协程销毁
+    return_to(current, parent);
 }
 
 void cocall(int stack_size, co_routine f, void *d)
@@ -33,6 +33,11 @@ void cocall(int stack_size, co_routine f, void *d)
     frame_t *frame;
     co_t *co = &co_on_stack;
     co_t *parent = coself();
+    
+    if(unlikely(parent->autostack)) {
+        f(d);
+        return;
+    }
     
     //分配新的协程co_t,并加入init队列中
     co->id = parent->id;

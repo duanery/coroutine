@@ -66,5 +66,5 @@ struct co_info {
 
 extern asmlinkage void switch_to(co_t *, co_t *);
 extern asmlinkage void call_to(co_t *, co_t *);
-
+extern asmlinkage void return_to(co_t *, co_t *);
 #endif
