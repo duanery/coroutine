@@ -259,7 +259,7 @@ static int __schedule(bool dequeue)
      * 协程切换
      * 1.切换到其他协程，而不是自己。
      * 2.非共享的，否则切换到next后，next可能调用cocall调用新协程，
-     * 从而破坏栈。 
+     * 从而破坏栈。
     **/
     if(likely(current != next && !share))
         switch_to(current, next);
@@ -375,7 +375,7 @@ void cowakeup(int coid)
 }
 
 //内部使用
-int __coloop()
+int __cotree_is_empty()
 {
     return !RB_EMPTY_ROOT(&co_root);
 }

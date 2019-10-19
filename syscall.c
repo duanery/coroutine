@@ -275,12 +275,12 @@ reaccept:
 }
 
 extern int event_loop(int timeout);
-extern int __coloop();
+extern int __cotree_is_empty();
 int coloop()
 {
     int loop;
     while(schedule());
     loop = event_loop(co_timeout());
     co_wakeup();
-    return loop || __coloop();
+    return loop || __cotree_is_empty();
 }
