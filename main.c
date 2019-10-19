@@ -226,6 +226,7 @@ void pagefault(void *d)
 #include "list.h"
 #include "co.h"
 #include "co_inner.h"
+int key_test;
 void cocall_test1(void *d)
 {
     long a = 500000000;
@@ -235,12 +236,16 @@ void cocall_test1(void *d)
     schedule();   //实际不会切出去
     while(a--)i+=a;
     printf("i=%ld\n", i);
+    printf("key_test %d\n", co_getspecific(key_test));
+    co_setspecific(key_test, (void *)2);
 }
 void cocall_test(void *d)
 {
     int a = 5;
     co_t *cur = coself();
+    key_test = co_key_create(NULL);
     printf("OK, %p, %p, %d\n", &a, (void *)cur->rsp, cur->stack_size);
+    co_setspecific(key_test, (void *)1);
     cocall(0, cocall_test1, NULL);
 }
 
@@ -249,12 +254,10 @@ void main()
     int i=0;
     srand(time(0));
     
-    
-    
     for(; i<MAXRAND; i++)
         cocreate(AUTOSTACK, pagefault, NULL);
     cocall(DEFAULT_STACK, cocall_test, NULL);
-    exit(0);
+    printf("key_test %d\n", co_getspecific(key_test));
     while(coloop());
     
     signalfd_init();
