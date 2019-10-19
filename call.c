@@ -19,6 +19,7 @@ void __call()
     current->func(current->data);
     //通过exit字段标识协程执行完毕
     current->exit = 1;
+    parent->child = NULL;
     //把父协程插入运行队列
     list_replace_init(&current->rq_node, &parent->rq_node);
     //返回到父协程，在__switch_to函数中会把子协程销毁
@@ -88,6 +89,8 @@ void cocall(int stack_size, co_routine f, void *d)
     co->sharestack = 0;
     co->parent = parent;
     co->top_parent = parent->type == 1 ? parent->top_parent : parent;
+    co->child = NULL;
+    parent->child = co;
     co->specific = NULL;
     co->spec_num = 0;
     if(unlikely(share_stack == NULL)) {

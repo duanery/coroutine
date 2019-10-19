@@ -51,6 +51,7 @@ typedef struct co_struct {
             struct co_struct *top_parent;
         };
     };
+    struct co_struct *child;
     co_routine func;
     void *data;
     void **specific;

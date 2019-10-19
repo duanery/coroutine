@@ -81,8 +81,8 @@ asmlinkage void __switch_stack(co_t *prev, co_t *next)
         if(co_onstack) {
             stack_size = (unsigned long)co_stack_bottom - co_onstack->rsp;
             stack_size = round_up(stack_size, pagesize);
-            if(stack_size <= COPY_STACK &&
-                !co_onstack->mmapstack) {
+            if(likely(stack_size <= COPY_STACK &&
+                !co_onstack->mmapstack)) {
                 // 1)
                 if(stack_size > co_onstack->stack_size) {
                     free(co_onstack->stack);
@@ -143,8 +143,8 @@ asmlinkage void __switch_stack(co_t *prev, co_t *next)
         
         stack_size = (unsigned long)co_stack_bottom - next->rsp;
         stack_size = round_up(stack_size, pagesize);
-        if(stack_size <= COPY_STACK &&
-            !next->mmapstack) {
+        if(likely(stack_size <= COPY_STACK &&
+            !next->mmapstack)) {
             // 2)
             stack_size = (unsigned long)co_stack_bottom - next->rsp;
             from = next->stack + next->stack_size - stack_size;
@@ -206,7 +206,7 @@ asmlinkage void __switch_to(co_t *prev, co_t *next)
         list_del(&prev->rq_node);
         rb_erase(&prev->rb, &co_root);
         if(co_onstack == prev) {
-            if(!next->autostack && co_onstack->mmapstack) {
+            if(unlikely(!next->autostack && co_onstack->mmapstack)) {
                 munmap(co_stack_bottom - co_onstack->stack_size, co_onstack->stack_size);
                 void *ptr = mmap(co_stack_bottom - COPY_STACK, COPY_STACK, 
                                 PROT_READ | PROT_WRITE,
@@ -219,7 +219,7 @@ asmlinkage void __switch_to(co_t *prev, co_t *next)
             }
             co_onstack = NULL;
         }
-        if(prev->mmapstack) {
+        if(unlikely(prev->mmapstack)) {
             char filename[64];
             close(prev->shmfd);
             sprintf(filename, "%d-%d", getpid(), prev->id);
@@ -299,6 +299,7 @@ unsigned long cocreate(int stack_size, co_routine f, void *d)
     co->mmapstack = 0;
     co->type = 0;
     co->sharestack = 0;
+    co->child = NULL;
     co->specific = NULL;
     co->spec_num = 0;
     if(stack_size == AUTOSTACK) {
@@ -345,9 +346,9 @@ void cokill(int coid)
 {
     co_t key = { .id = coid };
     co_t *co = rb_search(&co_root, &key, rb, co_cmp);
-    if(co) {
+    if(likely(co)) {
         //如果co睡眠则唤醒，放在current后面，schedule会尽快调度到。
-        if(list_empty(&co->rq_node))
+        if(likely(!co->child && list_empty(&co->rq_node)))
             list_add(&co->rq_node, &current->rq_node);
         co->exit = 1;
         schedule();
@@ -363,7 +364,7 @@ void __cowakeup(void *c)
 {
     co_t *co = c;
     //插入运行队列，放在队列尾
-    if(co && list_empty(&co->rq_node))
+    if(likely(co && !co->child && list_empty(&co->rq_node)))
         list_add_tail(&co->rq_node, &init.rq_node);
 }
 
@@ -404,9 +405,9 @@ int co_key_create(void (*destructor)(void*))
 
 int co_key_delete(int key)
 {
-    if(unlikely(key < 0) || 
+    if(unlikely(key < 0 ||
         co_specific_num <= key ||
-        !co_specific[key].used) {
+        !co_specific[key].used)) {
         return EINVAL;
     }
     co_specific[key].used = 0;
@@ -417,9 +418,9 @@ int co_key_delete(int key)
 void *co_getspecific(int key)
 {
     co_t *curr;
-    if(unlikely(key < 0) || 
+    if(unlikely(key < 0 ||
         co_specific_num <= key ||
-        !co_specific[key].used) {
+        !co_specific[key].used)) {
         return NULL;
     }
     curr = current->type == 1 ? current->top_parent : current;
@@ -432,9 +433,9 @@ void *co_getspecific(int key)
 int co_setspecific(int key, const void *value)
 {
     co_t *curr;
-    if(unlikely(key < 0) || 
+    if(unlikely(key < 0 ||
         co_specific_num <= key ||
-        !co_specific[key].used) {
+        !co_specific[key].used)) {
         return EINVAL;
     }
     curr = current->type == 1 ? current->top_parent : current;

@@ -97,7 +97,7 @@ int modify_event(int fd, unsigned int new_events)
     
     if(likely(coid() != 0)) {
         ei = co_getspecific(key_event);
-        if(!ei || ei->fd != fd) {
+        if(unlikely(!ei || ei->fd != fd)) {
             ei = lookup_event(fd);
             co_setspecific(key_event, ei);
         }
@@ -153,7 +153,7 @@ int event_loop(int timeout)
             polling = MAX_POLLING;
     }
     nr = epoll_wait(efd, events, nr_events, timeout<0 ? -1 : timeout/1000);
-    if (nr < 0) {
+    if (unlikely(nr < 0)) {
         if (errno == EINTR)
             return 1;
         exit(1);
