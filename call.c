@@ -25,16 +25,54 @@ void __call()
     return_to(current, parent);
 }
 
+/*
+ * ● cocreate 创建的非AUTOSTACK协程, schedule()切换不保存栈
+ * ○ cocreate 创建的  AUTOSTACK协程, schedule()切换  保存栈
+ * ☼ cocall   创建的  SHARESTACK协程, 不允许调用schedule()切换
+ * ❶ cocall   创建的非SHARESTACK协程,   允许调用schedule()切换
+ * 各种协程之间的关系图：
+ *      ●
+ *   ┏━┯┷┯━┓
+ *   ● ○ ☼ ❶
+ *   √ √ √ √ 全部都可以正常创建
+ *
+ *      ○
+ *   ┏━┯┷┯━┓
+ *   ● ○ ☼ ❶
+ *   √ √ √ ✘
+ *   ○→❶ 不允许创建，❶的co_t创建在○的栈上，而○的栈在CO_STACK_BOTTOM位置，
+ *   cocall中把○从运行队列中删除，❶加入运行队列，之后不可能再调度到○中，
+ *   但cocall的call_to经过特殊优化，没有调用__switch_stack没办法保存○的栈。
+ *   即使调用__switch_stack保存○的栈，但在❶中允许调用schedule()切换出去，
+ *   于是切换到其他○1协程，在__switch_stack中会把○协程的保存下来，于是就破坏
+ *   了❶的co_t的结构体。
+ *   最根本的原因是❶中允许schedule()切换，如果❶不会调度，即使call_to不调用
+ *   __switch_stack，也不会出问题。○会占用co_stack_bottom；而❶会占用share_stack
+ *   ❶执行返回，释放share_stack；○继续占用co_stack_bottom。
+ *   所以 ○→☼ 允许创建。
+ *
+ *      ☼
+ *   ┏━┯┷┯━┓
+ *   ● ○ ☼ ❶→☼
+ *   √ √ √ √
+ *   ☼→❶ 会被转换成 ❶→☼ ：因为❶一旦切换出去，但☼还在占用share_stack，意味着
+ *   其他协程有机会调用cocall创建☼1来再次占用share_stack。
+ *
+ *      ❶
+ *   ┏━┯┷┯━┓
+ *   ● ○ ☼ ❶
+ *   √ √ √ √ 全部都可以正常创建 ❶跟●没什么区别
+**/
 void cocall(int stack_size, co_routine f, void *d)
 {
     static void *share_stack = NULL;
     co_t co_on_stack;
-    frame_t parent_frame;
-    frame_t *frame;
     co_t *co = &co_on_stack;
     co_t *parent = coself();
+    frame_t *frame;
     
-    if(unlikely(parent->autostack)) {
+    // ○→❶
+    if(unlikely(parent->autostack && stack_size != SHARESTACK)) {
         f(d);
         return;
     }
@@ -57,6 +95,7 @@ void cocall(int stack_size, co_routine f, void *d)
     if(parent->type == 1 && parent->sharestack == 1) {
         /*
          * 3.父协程是call类型，且父协程是共享栈，子协程必定共享1M share_stack
+         * ☼→☼ ☼→❶
         **/
         co->stack_size = 0;
         co->rsp = 0;
@@ -67,6 +106,7 @@ void cocall(int stack_size, co_routine f, void *d)
          * 1.父协程是create类型，直接使用1M share_stack
          * 2.父协程是call类型，且父协程是独占栈，直接使用1M share_stack
          * 3.父协程是call类型，且父协程是共享栈，和父协程共享1M share_stack
+         * ●→☼ ○→☼ ❶→☼
         **/
         // 1. 2.
         co->stack_size = 1024*1024;
@@ -78,6 +118,7 @@ void cocall(int stack_size, co_routine f, void *d)
          * 1.父协程是create类型，直接创建新独占栈
          * 2.父协程是call类型，且父协程是独占栈，直接创建新独占栈
          * 3.父协程是call类型，且父协程是共享栈，和父协程共享1M share_stack
+         * ●→❶ ❶→❶
         **/
         // 1. 2.
         co->stack = memalign(getpagesize(), stack_size);
