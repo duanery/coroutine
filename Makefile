@@ -10,9 +10,13 @@ ifeq ($(ARCH), i386)
 endif
 CC		= $(CROSS_COMPILE)gcc
 AR		= $(CROSS_COMPILE)ar
+STRIP   = $(CROSS_COMPILE)strip
 
-all:$(OBJS)
+debug:$(OBJS)
 	@:
+
+release: $(OBJS)
+	@$(STRIP) $^
 
 -include $(foreach o, $(OBJS) $(addsuffix .o,$(basename $(SRC))), .$(notdir $o).d)
 
