@@ -121,7 +121,8 @@ void main(int argc, char *argv[])
         }
     }
     if(optind < argc) {
-        COPY_STACK = stack_size = atoi(argv[optind]);
+        stack_size = atoi(argv[optind]);
+        COPY_STACK = stack_size = round_up(stack_size, getpagesize());
     }
     printf("COPY_STACK %d\n", COPY_STACK);
     
