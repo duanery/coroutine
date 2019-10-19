@@ -46,7 +46,10 @@ typedef struct co_struct {
     struct list_head rq_node;
     union {
         struct rb_node rb;
-        struct co_struct *parent;
+        struct {
+            struct co_struct *parent;
+            struct co_struct *top_parent;
+        };
     };
     co_routine func;
     void *data;

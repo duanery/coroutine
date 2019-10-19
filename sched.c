@@ -416,30 +416,34 @@ int co_key_delete(int key)
 
 void *co_getspecific(int key)
 {
+    co_t *curr;
     if(unlikely(key < 0) || 
         co_specific_num <= key ||
         !co_specific[key].used) {
         return NULL;
     }
-    if(current->spec_num <= key)
+    curr = current->type == 1 ? current->top_parent : current;
+    if(curr->spec_num <= key)
         return NULL;
     else
-        return current->specific[key];
+        return curr->specific[key];
 }
 
 int co_setspecific(int key, const void *value)
 {
+    co_t *curr;
     if(unlikely(key < 0) || 
         co_specific_num <= key ||
         !co_specific[key].used) {
         return EINVAL;
     }
-    if(current->spec_num <= key) {
-        current->specific = realloc(current->specific, co_specific_num*sizeof(void *));
-        memset(current->specific + current->spec_num, 0, (co_specific_num-current->spec_num)*sizeof(void *));
-        current->spec_num = co_specific_num;
+    curr = current->type == 1 ? current->top_parent : current;
+    if(curr->spec_num <= key) {
+        curr->specific = realloc(curr->specific, co_specific_num*sizeof(void *));
+        memset(curr->specific + curr->spec_num, 0, (co_specific_num-curr->spec_num)*sizeof(void *));
+        curr->spec_num = co_specific_num;
     }
-    current->specific[key] = (void *)value;
+    curr->specific[key] = (void *)value;
     return 0;
 }
 

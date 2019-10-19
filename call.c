@@ -87,6 +87,7 @@ void cocall(int stack_size, co_routine f, void *d)
     co->type = 1;
     co->sharestack = 0;
     co->parent = parent;
+    co->top_parent = parent->type == 1 ? parent->top_parent : parent;
     co->specific = NULL;
     co->spec_num = 0;
     if(unlikely(share_stack == NULL)) {
