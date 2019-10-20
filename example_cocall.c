@@ -6,6 +6,7 @@
 #include <stdarg.h>
 
 #include "co.h"
+#include "glibc.h"
 
 void test__cocreate(void *unused)
 {
@@ -56,37 +57,6 @@ void test__cocall(void *fib)
     cocall(DEFAULT_STACK, call, fib+3);
 }
 
-
-void co__vprintf(void *p)
-{
-    struct {
-        int ret;
-        const char *format;
-        va_list ap;
-    }*args = p;
-    args->ret = vprintf(args->format, args->ap);
-}
-int co_vprintf(const char *format, va_list ap)
-{
-    struct {
-        int ret;
-        const char *format;
-        va_list ap;
-    }args = {0, format};
-    va_copy(args.ap, ap);
-    cocall(SHARESTACK, co__vprintf, &args);
-    return args.ret;
-}
-int myprintf(const char *format, ...)
-{
-    int ret;
-    va_list ap;
-    va_start(ap, format);
-    ret = co_vprintf(format, ap);
-    va_end(ap);
-    return ret;
-}
-
 void main()
 {
     unsigned long i;
@@ -96,6 +66,7 @@ void main()
         cocreate(AUTOSTACK, test__cocall, (void *)i);
     }
     while(coloop());
-    myprintf("end fib(20) = %d\n", fib(20));
+    int len = co_printf("end fib(20) = %d\n", fib(20));
+    printf("len = %d\n", len);
 }
 

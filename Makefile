@@ -2,7 +2,7 @@ SRC := switch_to.S sched.c rbtree.c syscall.c event.c call_to.S call.c
 HEADER := co.h  compiler.h  list.h  rbtree.h co_inner.h
 OBJS := main example_echo example_signalfd example_autostack example_co example_specific example_teststack example_cocall
 
-CFLAGS += -g -O2 -std=gnu99 -Wp,-MMD,.$(notdir $@).d
+CFLAGS += -g -O2 -std=gnu99 -Wp,-MMD,.$(notdir $@).d $(EXTRA_$@)
 
 ifeq ($(ARCH), i386)
     CFLAGS += -m32
@@ -38,5 +38,11 @@ switch_to.S call_to.S : co_offsets.h
 co_offsets.h : autogen
 	./autogen > $@
 
+example_cocall : glibc.c
+EXTRA_example_cocall := glibc.c
+glibc.c : glibc.def gencall.sh
+	@chmod +x gencall.sh
+	./gencall.sh $< > $@ 2> glibc.h
+
 clean:
-	@rm -f $(OBJS) *.o *.a .*.d co_offsets.h autogen
+	@rm -f $(OBJS) *.o *.a .*.d co_offsets.h autogen glibc.c glibc.h
