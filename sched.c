@@ -290,7 +290,7 @@ unsigned long cocreate(int stack_size, co_routine f, void *d)
     co_t *co;
     
     //分配新的协程co_t,并加入init队列中
-    co = malloc(sizeof(co_t));
+    co = memalign(SMP_CACHE_BYTES, sizeof(co_t));
     co->id = co_id++;
     co->func = f;
     co->data = d;

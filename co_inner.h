@@ -56,7 +56,7 @@ typedef struct co_struct {
     void *data;
     void **specific;
     int spec_num;
-}co_t;
+}__cacheline_aligned co_t;
 
 typedef struct co_specific {
     uint32_t used : 1;

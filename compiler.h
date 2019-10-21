@@ -11,6 +11,8 @@
 
 #define __init __attribute__((constructor))
 
+#define SMP_CACHE_BYTES 64
+#define __cacheline_aligned __attribute__((__aligned__(SMP_CACHE_BYTES)))
 
 #define __LOCAL(var, line) __ ## var ## line
 #define _LOCAL(var, line) __LOCAL(var, line)
