@@ -10,10 +10,10 @@
 #include "co.h"
 #include "co_inner.h"
 
+extern co_t *current;
 
 void __call()
 {
-    co_t *current = coself();
     co_t *parent = current->parent;
     //调用协程函数
     current->func(current->data);
@@ -69,7 +69,7 @@ void cocall(int stack_size, co_routine f, void *d)
     static void *share_stack = NULL;
     co_t co_on_stack;
     co_t *co = &co_on_stack;
-    co_t *parent = coself();
+    co_t *parent = current;
     frame_t *frame;
     
     // ○→❶
